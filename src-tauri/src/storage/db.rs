@@ -45,6 +45,7 @@ pub struct TransferHistoryRow {
     pub status:         String,
     pub started_at:     i64,
     pub completed_at:   Option<i64>,
+    pub transfer_id:    Option<String>,
 }
 
 /// A row in the files index table.
@@ -210,8 +211,8 @@ impl Db {
         let id = sqlx::query(
             "INSERT INTO transfer_history \
                (peer_device_id, filename, remote_path, local_path, size, \
-                bytes_received, status, started_at, completed_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                bytes_received, status, started_at, completed_at, transfer_id) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&t.peer_device_id)
         .bind(&t.filename)
@@ -222,6 +223,7 @@ impl Db {
         .bind(&t.status)
         .bind(t.started_at)
         .bind(t.completed_at)
+        .bind(&t.transfer_id)
         .execute(&self.pool)
         .await?
         .last_insert_rowid();
@@ -253,12 +255,52 @@ impl Db {
     pub async fn get_transfer_history(&self) -> Result<Vec<TransferHistoryRow>, DbError> {
         let rows = sqlx::query_as::<_, TransferHistoryRow>(
             "SELECT peer_device_id, filename, remote_path, local_path, size, \
-                    bytes_received, status, started_at, completed_at \
+                    bytes_received, status, started_at, completed_at, transfer_id \
              FROM transfer_history ORDER BY started_at DESC",
         )
         .fetch_all(&self.pool)
         .await?;
         Ok(rows)
+    }
+
+    /// Set only the status column for a transfer row, leaving progress untouched.
+    pub async fn set_transfer_status(&self, id: i64, status: &str) -> Result<(), DbError> {
+        sqlx::query("UPDATE transfer_history SET status = ? WHERE id = ?")
+            .bind(status)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Read the current bytes_received for a transfer row.
+    pub async fn get_transfer_bytes(&self, id: i64) -> Result<Option<i64>, DbError> {
+        let bytes = sqlx::query_scalar::<_, i64>(
+            "SELECT bytes_received FROM transfer_history WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(bytes)
+    }
+
+    /// Find the most recent partial transfer for a peer and remote path, if any.
+    /// Returns (row id, transfer_id, bytes_received).
+    pub async fn find_partial_transfer(
+        &self,
+        peer_device_id: &str,
+        remote_path: &str,
+    ) -> Result<Option<(i64, Option<String>, i64)>, DbError> {
+        let row = sqlx::query_as::<_, (i64, Option<String>, i64)>(
+            "SELECT id, transfer_id, bytes_received FROM transfer_history \
+             WHERE peer_device_id = ? AND remote_path = ? AND status = 'partial' \
+             ORDER BY started_at DESC LIMIT 1",
+        )
+        .bind(peer_device_id)
+        .bind(remote_path)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
     }
 
     /// Insert or replace a single file row in the index.

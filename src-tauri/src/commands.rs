@@ -194,11 +194,10 @@ pub async fn request_file_cmd(
             .ok_or_else(|| "peer not online".to_string())?
     };
 
-    let path = crate::network::transfer::request_transfer(
+    let path = crate::network::transfer::request_transfer_with_retry(
         &device_id,
         ip,
         remote_path,
-        0,
         &state.identity,
         &state.db,
         &download_dir,
