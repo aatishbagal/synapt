@@ -10,6 +10,8 @@ use thiserror::Error;
 pub const MULTICAST_GROUP: Ipv4Addr = Ipv4Addr::new(239, 255, 42, 99);
 pub const MULTICAST_PORT:  u16 = 42099;
 pub const PAIRING_PORT:    u16 = 42100;
+/// Reserved for the v0.x file-search feature; not yet used.
+#[allow(dead_code)]
 pub const SEARCH_PORT:     u16 = 42101;
 pub const TRANSFER_PORT:   u16 = 42102;
 

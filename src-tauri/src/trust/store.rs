@@ -3,7 +3,7 @@ use sha2::{Sha256, Digest};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use rand::rngs::OsRng;
 use uuid::Uuid;
-use crate::storage::{Db, DbError, LocalDeviceRow, TrustedPeerRow};
+use crate::storage::{Db, DbError, LocalDeviceRow};
 use synapt_core::TrustedPeer;
 use thiserror::Error;
 

@@ -23,6 +23,7 @@ const MAX_PAIR_MSG: usize = 65536;
 /// Wire messages exchanged during the pairing ceremony.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[allow(clippy::enum_variant_names)]
 pub enum PairMsg {
     PairRequest { device_id: String, device_name: String, pubkey_b64: String },
     PairAccept { device_id: String, device_name: String, pubkey_b64: String },

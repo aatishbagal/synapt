@@ -1,8 +1,13 @@
+#[cfg(target_os = "linux")]
 pub mod linux;
+#[cfg(target_os = "windows")]
 pub mod windows;
+#[cfg(target_os = "macos")]
 pub mod macos;
 
 /// The active display server or OS platform.
+// Variants are platform-specific; not all are constructed on every target.
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DisplayServer {
     WaylandGnome,
@@ -10,6 +15,17 @@ pub enum DisplayServer {
     X11,
     Windows,
     MacOS,
+}
+
+/// Detect the platform and run the current OS's setup hook.
+pub fn setup_current() {
+    tracing::info!("display server: {:?}", detect());
+    #[cfg(target_os = "linux")]
+    linux::setup();
+    #[cfg(target_os = "windows")]
+    windows::setup();
+    #[cfg(target_os = "macos")]
+    macos::setup();
 }
 
 /// Detect the current platform at runtime.

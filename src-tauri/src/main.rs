@@ -61,6 +61,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
         .manage(state)
         .setup(move |app| {
+            platform::setup_current();
+
             // Pairing responder server.
             let handle = app.handle().clone();
             let db2 = Arc::clone(&db);
@@ -85,6 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::get_local_device,
             commands::get_peers,
             commands::get_trusted_peers,
             commands::begin_pairing_cmd,

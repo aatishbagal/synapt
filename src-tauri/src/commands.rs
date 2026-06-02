@@ -5,6 +5,30 @@ fn lock<T>(m: &std::sync::Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// Local device identity exposed to the UI (no private key material).
+#[derive(serde::Serialize)]
+pub struct LocalDeviceInfo {
+    pub device_id: String,
+    pub device_name: String,
+    pub pubkey_b64: String,
+    pub fingerprint: String,
+}
+
+/// Get the local device identity and key fingerprint.
+#[tauri::command]
+pub async fn get_local_device(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<LocalDeviceInfo, String> {
+    let fingerprint =
+        crate::trust::fingerprint(&state.identity.pubkey_b64).map_err(|e| e.to_string())?;
+    Ok(LocalDeviceInfo {
+        device_id: state.identity.device_id.to_string(),
+        device_name: state.identity.device_name.clone(),
+        pubkey_b64: state.identity.pubkey_b64.clone(),
+        fingerprint,
+    })
+}
+
 /// List peers currently visible on the LAN.
 #[tauri::command]
 pub async fn get_peers(
