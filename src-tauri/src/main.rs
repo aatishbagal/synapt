@@ -6,6 +6,7 @@ mod trust;
 mod storage;
 mod platform;
 mod search;
+mod share;
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -98,36 +99,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             #[cfg(target_os = "macos")]
             platform::macos::setup(app);
 
-            // System tray. Uses Tauri's built-in tray, which calls NSStatusBar on
-            // macOS and the platform tray on Windows/Linux (no AppIndicator needed).
-            if let Some(icon) = app.default_window_icon().cloned() {
-                use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-                let tray = TrayIconBuilder::with_id("synapt-tray")
-                    .icon(icon)
-                    .tooltip("Synapt")
-                    .on_tray_icon_event(|tray, event| {
-                        if let TrayIconEvent::Click {
-                            button: MouseButton::Left,
-                            button_state: MouseButtonState::Up,
-                            ..
-                        } = event
-                        {
-                            let app = tray.app_handle();
-                            if let Some(window) = app.get_webview_window("main") {
-                                if window.is_visible().unwrap_or(false) {
-                                    let _ = window.hide();
-                                } else {
-                                    let _ = window.show();
-                                    let _ = window.set_focus();
-                                }
-                            }
-                        }
-                    })
-                    .build(app);
-                if let Err(e) = tray {
-                    tracing::error!("failed to build system tray: {}", e);
-                }
-            }
+            // Shared system tray: become the host (owns the single icon) or attach
+            // as a client to an already-running Synapt/SynaptClip host.
+            share::start(app);
 
             // Global hotkey to toggle the overlay.
             // Linux X11 uses XGrabKey; Wayland uses the inhibitor protocol and may
