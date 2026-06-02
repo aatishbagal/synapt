@@ -175,11 +175,14 @@ pub async fn confirm_pairing(
 }
 
 /// Run the pairing responder server, accepting inbound pairing connections.
+/// For each connection a fresh oneshot channel is created; the sender is stored
+/// in `pair_tx` for the accept/reject commands and the receiver is handed to the
+/// responder task to await the user's decision.
 pub async fn start_pairing_server(
     identity: Arc<LocalIdentity>,
     db: Arc<Db>,
     app: AppHandle,
-    decision_rx: Arc<Mutex<Option<oneshot::Receiver<bool>>>>,
+    pair_tx: Arc<Mutex<Option<oneshot::Sender<bool>>>>,
 ) -> Result<(), PairingError> {
     let listener = TcpListener::bind(format!("0.0.0.0:{PAIRING_PORT}")).await?;
     tracing::info!("pairing server listening on port {}", PAIRING_PORT);
@@ -189,7 +192,10 @@ pub async fn start_pairing_server(
         let identity = Arc::clone(&identity);
         let db = Arc::clone(&db);
         let app = app.clone();
-        let decision_rx = Arc::clone(&decision_rx);
+
+        let (decision_tx, decision_rx) = oneshot::channel();
+        *pair_tx.lock().await = Some(decision_tx);
+
         tokio::spawn(async move {
             if let Err(e) = handle_responder(stream, addr, identity, db, app, decision_rx).await {
                 tracing::warn!("pairing responder error from {}: {}", addr, e);
@@ -204,7 +210,7 @@ async fn handle_responder(
     identity: Arc<LocalIdentity>,
     db: Arc<Db>,
     app: AppHandle,
-    decision_rx: Arc<Mutex<Option<oneshot::Receiver<bool>>>>,
+    decision_rx: oneshot::Receiver<bool>,
 ) -> Result<(), PairingError> {
     let (their_id, their_name, their_eph_b64) = match recv_msg(&mut stream).await? {
         PairMsg::PairRequest { device_id, device_name, pubkey_b64 } => {
@@ -238,11 +244,7 @@ async fn handle_responder(
     )
     .await?;
 
-    let receiver = { decision_rx.lock().await.take() };
-    let accepted = match receiver {
-        Some(rx) => rx.await.unwrap_or(false),
-        None => false,
-    };
+    let accepted = decision_rx.await.unwrap_or(false);
 
     if !accepted {
         send_msg(&mut stream, &PairMsg::PairRejected).await?;

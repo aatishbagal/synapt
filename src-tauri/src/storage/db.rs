@@ -34,7 +34,7 @@ pub struct TrustedPeerRow {
 }
 
 /// A row in the transfer_history table (without the auto-increment id).
-#[derive(Debug, sqlx::FromRow, Clone)]
+#[derive(Debug, sqlx::FromRow, Clone, serde::Serialize)]
 pub struct TransferHistoryRow {
     pub peer_device_id: String,
     pub filename:       String,
