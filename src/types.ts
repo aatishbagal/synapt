@@ -23,6 +23,17 @@ export interface TransferProgress {
   total: number;
 }
 
+export interface QueueEntry {
+  transfer_id: string;
+  filename: string;
+  remote_path: string;
+  peer_name: string;
+  status: 'Queued' | 'InProgress' | 'Complete' | { Failed: { reason: string } } | 'Partial';
+  bytes_received: number;
+  total: number;
+  started_at: number;
+}
+
 export type InputMode = 'local' | 'folder' | 'remote' | 'settings' | 'calc';
 
 export interface ParsedInput {

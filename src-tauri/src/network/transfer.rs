@@ -59,6 +59,8 @@ enum TransferMsg {
     TransferComplete { checksum: String },
     FileSkipped { path: String, reason: String },
     BatchComplete { total_files: u64, skipped: u64 },
+    PushStart { filename: String, size: u64, checksum: String },
+    PushAccept,
     Error { code: String },
 }
 
@@ -106,7 +108,8 @@ pub fn is_path_allowed(requested: &Path, shared_dirs: &[String]) -> bool {
 pub async fn start_transfer_server(
     identity: Arc<LocalIdentity>,
     db: Arc<Db>,
-    _app: AppHandle,
+    app: AppHandle,
+    queue: Arc<TransferQueue>,
 ) -> Result<(), TransferError> {
     let listener = TcpListener::bind(format!("0.0.0.0:{TRANSFER_PORT}")).await?;
     tracing::info!("transfer server listening on port {}", TRANSFER_PORT);
@@ -115,8 +118,10 @@ pub async fn start_transfer_server(
         let (stream, addr) = listener.accept().await?;
         let identity = Arc::clone(&identity);
         let db = Arc::clone(&db);
+        let app = app.clone();
+        let queue = Arc::clone(&queue);
         tokio::spawn(async move {
-            if let Err(e) = handle_server_conn(stream, addr, identity, db).await {
+            if let Err(e) = handle_server_conn(stream, addr, identity, db, app, queue).await {
                 tracing::warn!("transfer server error from {}: {}", addr, e);
             }
         });
@@ -128,8 +133,10 @@ async fn handle_server_conn(
     addr: SocketAddr,
     identity: Arc<LocalIdentity>,
     db: Arc<Db>,
+    app: AppHandle,
+    queue: Arc<TransferQueue>,
 ) -> Result<(), TransferError> {
-    let key = session_handshake_server(&mut stream, &identity, &db).await?;
+    let (key, peer_device_id) = session_handshake_server(&mut stream, &identity, &db).await?;
 
     match serde_json::from_slice::<TransferMsg>(&read_enc(&mut stream, &key).await?)? {
         TransferMsg::TransferRequest { path, resume_offset } => {
@@ -138,7 +145,140 @@ async fn handle_server_conn(
         TransferMsg::BatchTransferRequest { paths } => {
             serve_batch(&mut stream, &key, paths, &db, addr).await
         }
+        TransferMsg::PushStart { filename, size, checksum } => {
+            recv_pushed_file(
+                &mut stream, &key, &peer_device_id, filename, size, checksum, &db, &app, &queue,
+            )
+            .await
+        }
         other => Err(TransferError::Protocol(format!("unexpected {other:?}"))),
+    }
+}
+
+/// Receive a file pushed by a trusted peer, writing it under the download dir.
+#[allow(clippy::too_many_arguments)]
+async fn recv_pushed_file(
+    stream: &mut TcpStream,
+    key: &[u8; 32],
+    peer_device_id: &str,
+    filename: String,
+    size: u64,
+    checksum: String,
+    db: &Db,
+    app: &AppHandle,
+    queue: &TransferQueue,
+) -> Result<(), TransferError> {
+    let safe_name = Path::new(&filename)
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "file".into());
+
+    let download_dir = match db.get_setting("download_dir").await? {
+        Some(d) if !d.is_empty() => PathBuf::from(d),
+        _ => dirs::download_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("Synapt"),
+    };
+
+    let peer_name = db
+        .get_trusted_peers()
+        .await?
+        .into_iter()
+        .find(|p| p.device_id == peer_device_id)
+        .map(|p| p.device_name)
+        .unwrap_or_else(|| peer_device_id.to_string());
+
+    let dir = download_dir.join(&peer_name);
+    tokio::fs::create_dir_all(&dir).await?;
+    let local_path = dir.join(&safe_name);
+
+    let transfer_id = Uuid::new_v4().to_string();
+    let started_at = chrono::Utc::now().timestamp();
+    let hist_id = db
+        .insert_transfer(&TransferHistoryRow {
+            peer_device_id: peer_device_id.to_string(),
+            filename: safe_name.clone(),
+            remote_path: filename.clone(),
+            local_path: local_path.to_string_lossy().to_string(),
+            size: Some(size as i64),
+            bytes_received: 0,
+            status: "in_progress".into(),
+            started_at,
+            completed_at: None,
+            transfer_id: Some(transfer_id.clone()),
+        })
+        .await?;
+
+    queue.push(QueueEntry {
+        transfer_id: transfer_id.clone(),
+        filename: safe_name.clone(),
+        remote_path: filename.clone(),
+        peer_name: peer_name.clone(),
+        status: QueueStatus::InProgress,
+        bytes_received: 0,
+        total: size,
+        started_at,
+    });
+
+    write_enc(stream, key, &serde_json::to_vec(&TransferMsg::PushAccept)?).await?;
+
+    let mut file = tokio::fs::File::create(&local_path).await?;
+    let mut bytes_received = 0u64;
+    while bytes_received < size {
+        let chunk = read_enc(stream, key).await?;
+        if chunk.is_empty() {
+            break;
+        }
+        file.write_all(&chunk).await?;
+        bytes_received += chunk.len() as u64;
+        db.update_transfer_status(hist_id, bytes_received, "in_progress", None).await?;
+        queue.update(&transfer_id, QueueStatus::InProgress, bytes_received);
+        let _ = app.emit(
+            "transfer-progress",
+            serde_json::json!({
+                "transfer_id": transfer_id,
+                "filename": safe_name,
+                "bytes_received": bytes_received,
+                "total": size,
+                "peer_name": peer_name,
+            }),
+        );
+    }
+    file.flush().await?;
+
+    let actual = sha256_of_file(&local_path).await?;
+    let now = chrono::Utc::now().timestamp();
+    if actual == checksum {
+        db.update_transfer_status(hist_id, bytes_received, "complete", Some(now)).await?;
+        queue.update(&transfer_id, QueueStatus::Complete, bytes_received);
+        let _ = app.emit(
+            "transfer-complete",
+            serde_json::json!({
+                "transfer_id": transfer_id,
+                "filename": safe_name,
+                "local_path": local_path.to_string_lossy(),
+                "peer_name": peer_name,
+            }),
+        );
+        Ok(())
+    } else {
+        tracing::warn!("pushed file checksum mismatch for {}", safe_name);
+        let _ = tokio::fs::remove_file(&local_path).await;
+        db.update_transfer_status(hist_id, 0, "failed", Some(now)).await?;
+        queue.update(
+            &transfer_id,
+            QueueStatus::Failed { reason: "checksum_mismatch".into() },
+            0,
+        );
+        let _ = app.emit(
+            "transfer-failed",
+            serde_json::json!({
+                "transfer_id": transfer_id,
+                "filename": safe_name,
+                "reason": "checksum_mismatch",
+            }),
+        );
+        Err(TransferError::Checksum)
     }
 }
 
@@ -582,6 +722,133 @@ pub async fn request_batch_transfer_with_retry(
     );
 
     Ok(paths)
+}
+
+/// Push (send) local files to a trusted peer. Files that fail are logged and
+/// skipped; the remaining files continue.
+#[allow(clippy::too_many_arguments)]
+pub async fn push_files(
+    peer_device_id: &str,
+    peer_ip: IpAddr,
+    local_paths: Vec<String>,
+    identity: &LocalIdentity,
+    db: &Db,
+    peer_name: &str,
+    app: &AppHandle,
+    queue: &TransferQueue,
+) -> Result<(), TransferError> {
+    let peer_pubkey = {
+        let peers = db.get_trusted_peers().await?;
+        let peer = peers
+            .iter()
+            .find(|p| p.device_id == peer_device_id)
+            .ok_or(TransferError::NotTrusted)?;
+        peer.pubkey_b64.clone()
+    };
+    let local_id = identity.device_id.to_string();
+
+    for local_path in local_paths {
+        if let Err(e) = push_one_file(
+            &local_path, peer_ip, &local_id, identity, &peer_pubkey, peer_name, app, queue,
+        )
+        .await
+        {
+            tracing::warn!("push of {} failed: {}", local_path, e);
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn push_one_file(
+    local_path: &str,
+    peer_ip: IpAddr,
+    local_id: &str,
+    identity: &LocalIdentity,
+    peer_pubkey: &str,
+    peer_name: &str,
+    app: &AppHandle,
+    queue: &TransferQueue,
+) -> Result<(), TransferError> {
+    let p = Path::new(local_path);
+    let meta = tokio::fs::metadata(p).await?;
+    if !meta.is_file() {
+        return Err(TransferError::Protocol("not a file".into()));
+    }
+    let size = meta.len();
+    let filename = p
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "file".into());
+    let checksum = sha256_of_file(p).await?;
+
+    let transfer_id = Uuid::new_v4().to_string();
+    let started_at = chrono::Utc::now().timestamp();
+    queue.push(QueueEntry {
+        transfer_id: transfer_id.clone(),
+        filename: filename.clone(),
+        remote_path: local_path.to_string(),
+        peer_name: peer_name.to_string(),
+        status: QueueStatus::InProgress,
+        bytes_received: 0,
+        total: size,
+        started_at,
+    });
+
+    let mut stream = TcpStream::connect((peer_ip, TRANSFER_PORT)).await?;
+    let key = session_handshake_client(&mut stream, local_id, identity, peer_pubkey).await?;
+
+    write_enc(
+        &mut stream,
+        &key,
+        &serde_json::to_vec(&TransferMsg::PushStart {
+            filename: filename.clone(),
+            size,
+            checksum,
+        })?,
+    )
+    .await?;
+
+    match serde_json::from_slice::<TransferMsg>(&read_enc(&mut stream, &key).await?)? {
+        TransferMsg::PushAccept => {}
+        TransferMsg::Error { code } => return Err(TransferError::Protocol(code)),
+        other => return Err(TransferError::Protocol(format!("unexpected {other:?}"))),
+    }
+
+    let mut file = tokio::fs::File::open(p).await?;
+    let mut buf = vec![0u8; CHUNK_SIZE];
+    let mut sent = 0u64;
+    loop {
+        let n = file.read(&mut buf).await?;
+        if n == 0 {
+            break;
+        }
+        write_enc(&mut stream, &key, &buf[..n]).await?;
+        sent += n as u64;
+        queue.update(&transfer_id, QueueStatus::InProgress, sent);
+        let _ = app.emit(
+            "transfer-progress",
+            serde_json::json!({
+                "transfer_id": transfer_id,
+                "filename": filename,
+                "bytes_received": sent,
+                "total": size,
+                "peer_name": peer_name,
+            }),
+        );
+    }
+
+    queue.update(&transfer_id, QueueStatus::Complete, sent);
+    let _ = app.emit(
+        "transfer-complete",
+        serde_json::json!({
+            "transfer_id": transfer_id,
+            "filename": filename,
+            "local_path": local_path,
+            "peer_name": peer_name,
+        }),
+    );
+    Ok(())
 }
 
 #[cfg(test)]

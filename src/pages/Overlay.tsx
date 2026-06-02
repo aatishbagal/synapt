@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { PeerCard } from '../components/PeerCard';
 import { PairingDialog } from '../components/PairingDialog';
 import { SearchBar } from '../components/SearchBar';
@@ -26,6 +27,9 @@ export const Overlay: React.FC = () => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [selectedPeerForSend, setSelectedPeerForSend] = useState<Peer | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   const nav = useNavigate();
 
@@ -101,6 +105,51 @@ export const Overlay: React.FC = () => {
     invoke('open_file_path', { path: result.path }).catch(() => {});
   };
 
+  const sendPaths = (paths: string[]) => {
+    if (!selectedPeerForSend) {
+      setError('Select a trusted device first');
+      return;
+    }
+    if (paths.length === 0) return;
+    setError(null);
+    invoke('send_files_cmd', {
+      deviceId: selectedPeerForSend.device_id,
+      localPaths: paths,
+    }).catch(err => setError(String(err)));
+  };
+
+  // Tauri v2 delivers dropped-file paths through the webview drag-drop event
+  // (the native handler intercepts before the HTML layer sees them).
+  useEffect(() => {
+    const unlisten = getCurrentWebview().onDragDropEvent(event => {
+      const p = event.payload;
+      if (p.type === 'enter' || p.type === 'over') {
+        setDragOver(true);
+      } else if (p.type === 'leave') {
+        setDragOver(false);
+      } else if (p.type === 'drop') {
+        setDragOver(false);
+        sendPaths(p.paths);
+      }
+    });
+    return () => {
+      unlisten.then(fn => fn());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPeerForSend]);
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    // Fallback for environments where HTML drop exposes file paths directly.
+    const paths: string[] = [];
+    for (let i = 0; i < e.dataTransfer.files.length; i++) {
+      const file = e.dataTransfer.files[i] as unknown as { path?: string };
+      if (file.path) paths.push(file.path);
+    }
+    if (paths.length > 0) sendPaths(paths);
+  };
+
   const handleRootKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -114,7 +163,11 @@ export const Overlay: React.FC = () => {
       if (result) openSelected(result);
     } else if (e.key === 'Escape') {
       e.preventDefault();
-      invoke('hide_window').catch(() => {});
+      if (selectedPeerForSend) {
+        setSelectedPeerForSend(null);
+      } else {
+        invoke('hide_window').catch(() => {});
+      }
     }
   };
 
@@ -124,7 +177,15 @@ export const Overlay: React.FC = () => {
     <div
       tabIndex={0}
       onKeyDown={handleRootKeyDown}
-      className="w-full h-screen bg-bg flex flex-col focus:outline-none"
+      onDragOver={e => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDrop}
+      className={`w-full h-screen bg-bg flex flex-col focus:outline-none ${
+        dragOver ? 'ring-2 ring-accent' : ''
+      }`}
     >
       <div className="flex items-center justify-between px-4 pt-3 pb-2">
         <span className="text-text-primary text-sm font-medium">Synapt</span>
@@ -174,11 +235,20 @@ export const Overlay: React.FC = () => {
               key={p.device_id}
               peer={p}
               onPair={setPairingPeer}
-              onSendFile={() => {
-                /* file picker - v0.2 */
-              }}
+              onSendFile={setSelectedPeerForSend}
+              selected={selectedPeerForSend?.device_id === p.device_id}
+              onSelect={setSelectedPeerForSend}
             />
           ))
+        )}
+        {!selectedPeerForSend ? (
+          <p className="text-text-muted text-xs">
+            Select a trusted device to send files via drag-and-drop
+          </p>
+        ) : (
+          <p className="text-accent text-xs">
+            Drop files to send to {selectedPeerForSend.device_name}
+          </p>
         )}
       </div>
 

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { TrustedPeer } from '../types';
+import { listen } from '@tauri-apps/api/event';
+import { QueueEntry, TrustedPeer } from '../types';
 
 interface LocalDevice {
   device_id: string;
@@ -34,6 +35,45 @@ function relativeDate(unixSeconds: number): string {
   return `${Math.floor(diff / day)}d ago`;
 }
 
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = n / 1024;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i += 1;
+  }
+  return `${value.toFixed(1)} ${units[i]}`;
+}
+
+type QueueStatus = QueueEntry['status'];
+
+function isFailed(s: QueueStatus): s is { Failed: { reason: string } } {
+  return typeof s === 'object' && s !== null && 'Failed' in s;
+}
+
+function statusLabel(s: QueueStatus): string {
+  return isFailed(s) ? 'Failed' : s;
+}
+
+function statusBadgeClass(s: QueueStatus): string {
+  const base = 'text-xs rounded px-2 py-0.5';
+  if (isFailed(s)) return `${base} bg-red-900/30 text-red-400`;
+  switch (s) {
+    case 'Queued':
+      return `${base} bg-border text-text-muted`;
+    case 'InProgress':
+      return `${base} bg-accent/10 text-accent`;
+    case 'Complete':
+      return `${base} bg-green-900/30 text-green-400`;
+    case 'Partial':
+      return `${base} bg-yellow-900/30 text-yellow-400`;
+    default:
+      return `${base} bg-border text-text-muted`;
+  }
+}
+
 export const Settings: React.FC = () => {
   const nav = useNavigate();
 
@@ -45,6 +85,7 @@ export const Settings: React.FC = () => {
   const [maxResults, setMaxResults] = useState('50');
   const [includeHidden, setIncludeHidden] = useState(false);
   const [history, setHistory] = useState<TransferHistory[]>([]);
+  const [queue, setQueue] = useState<QueueEntry[]>([]);
 
   const loadTrusted = async () => {
     setTrusted(await invoke<TrustedPeer[]>('get_trusted_peers').catch(() => []));
@@ -70,6 +111,50 @@ export const Settings: React.FC = () => {
 
       setHistory(await invoke<TransferHistory[]>('get_transfer_history').catch(() => []));
     })();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let running = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const isActive = (e: QueueEntry) => e.status === 'InProgress' || e.status === 'Queued';
+    const refresh = async () => {
+      const q = await invoke<QueueEntry[]>('get_transfer_queue').catch(() => []);
+      if (!cancelled) setQueue(q);
+      return q;
+    };
+    const tick = async () => {
+      const q = await refresh();
+      if (cancelled) {
+        running = false;
+        return;
+      }
+      if (q.some(isActive)) {
+        timer = setTimeout(tick, 2000);
+      } else {
+        running = false;
+      }
+    };
+    const ensureRunning = () => {
+      if (running || cancelled) return;
+      running = true;
+      tick();
+    };
+    ensureRunning();
+    const unlistenProgress = listen('transfer-progress', ensureRunning);
+    const unlistenComplete = listen('transfer-complete', () => {
+      refresh();
+    });
+    const unlistenFailed = listen('transfer-failed', () => {
+      refresh();
+    });
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      unlistenProgress.then(fn => fn());
+      unlistenComplete.then(fn => fn());
+      unlistenFailed.then(fn => fn());
+    };
   }, []);
 
   const saveDeviceName = async () => {
@@ -182,6 +267,41 @@ export const Settings: React.FC = () => {
             <span className="text-text-primary text-sm">Include hidden files</span>
           </label>
         </div>
+      </section>
+
+      <section className="mb-8">
+        <h2 className={SECTION}>Transfer Queue</h2>
+        {queue.length === 0
+          ? <p className="text-text-muted text-xs">No transfers yet.</p>
+          : (
+            <div className="flex flex-col gap-2">
+              {queue.map(t => (
+                <div key={t.transfer_id} className="bg-surface border border-border rounded-card px-4 py-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-text-primary text-sm font-medium">{t.filename}</p>
+                      <p className="text-text-muted text-xs">{t.peer_name}</p>
+                    </div>
+                    <span className={statusBadgeClass(t.status)}>{statusLabel(t.status)}</span>
+                  </div>
+                  {t.status === 'InProgress' && (
+                    <div className="h-1 rounded bg-border mt-2">
+                      <div
+                        className="h-1 rounded bg-accent"
+                        style={{ width: `${t.total > 0 ? (t.bytes_received / t.total) * 100 : 0}%` }}
+                      />
+                    </div>
+                  )}
+                  {t.status === 'Complete' && (
+                    <p className="text-text-muted text-xs mt-1">{formatBytes(t.total)}</p>
+                  )}
+                  {isFailed(t.status) && (
+                    <p className="text-red-400 text-xs mt-1">{t.status.Failed.reason}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
       </section>
 
       <section className="mb-8">

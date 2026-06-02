@@ -98,12 +98,13 @@ pub(crate) async fn read_enc(stream: &mut TcpStream, key: &[u8; 32]) -> Result<V
     Ok(decrypt(key, &ct)?)
 }
 
-/// Responder side of the session handshake. Returns the derived session key.
+/// Responder side of the session handshake. Returns the derived session key and
+/// the authenticated device_id of the connecting peer.
 pub async fn session_handshake_server(
     stream: &mut TcpStream,
     identity: &LocalIdentity,
     db: &Db,
-) -> Result<[u8; 32], SessionError> {
+) -> Result<([u8; 32], String), SessionError> {
     let init: HandshakeInit = serde_json::from_slice(&read_plain(stream).await?)?;
 
     let peers = db.get_trusted_peers().await?;
@@ -127,7 +128,7 @@ pub async fn session_handshake_server(
     )
     .await?;
 
-    Ok(key)
+    Ok((key, peer.device_id))
 }
 
 /// Initiator side of the session handshake. Returns the derived session key.

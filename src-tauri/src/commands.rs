@@ -265,6 +265,51 @@ pub async fn get_transfer_queue(
     Ok(state.transfer_queue.list())
 }
 
+/// Send (push) one or more local files to a trusted peer.
+#[tauri::command]
+pub async fn send_files_cmd(
+    device_id: String,
+    local_paths: Vec<String>,
+    state: tauri::State<'_, crate::AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    for path in &local_paths {
+        let meta = std::fs::metadata(path).map_err(|e| format!("{path}: {e}"))?;
+        if !meta.is_file() {
+            return Err(format!("{path} is not a file"));
+        }
+    }
+
+    let peers = crate::trust::list_trusted_peers(&state.db).await.map_err(|e| e.to_string())?;
+    let peer = peers
+        .iter()
+        .find(|p| p.device_id.to_string() == device_id)
+        .ok_or_else(|| "peer not trusted".to_string())?;
+    let peer_name = peer.device_name.clone();
+
+    let ip = {
+        let map = lock(&state.peer_map);
+        map.get(&device_id)
+            .map(|e| e.peer.ip)
+            .ok_or_else(|| "peer not online".to_string())?
+    };
+
+    crate::network::transfer::push_files(
+        &device_id,
+        ip,
+        local_paths,
+        &state.identity,
+        &state.db,
+        &peer_name,
+        &app,
+        &state.transfer_queue,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 /// Get the transfer history, most recent first.
 #[tauri::command]
 pub async fn get_transfer_history(

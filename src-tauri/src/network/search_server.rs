@@ -63,7 +63,7 @@ async fn handle_search_conn(
     db: Arc<Db>,
     engine: Arc<SearchEngine>,
 ) -> Result<(), SearchServerError> {
-    let key = session_handshake_server(&mut stream, &identity, &db).await?;
+    let (key, _peer_id) = session_handshake_server(&mut stream, &identity, &db).await?;
 
     let (query, max_results) = match serde_json::from_slice::<SearchMsg>(&read_enc(&mut stream, &key).await?)? {
         SearchMsg::SearchRequest { query, max_results } => (query, max_results),

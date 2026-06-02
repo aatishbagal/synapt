@@ -100,8 +100,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let handle2 = app.handle().clone();
             let db3 = Arc::clone(&db);
             let id3 = Arc::clone(&identity);
+            let tq3 = Arc::clone(&transfer_queue);
             tokio::spawn(async move {
-                if let Err(e) = network::transfer::start_transfer_server(id3, db3, handle2).await {
+                if let Err(e) = network::transfer::start_transfer_server(id3, db3, handle2, tq3).await {
                     tracing::error!("transfer server error: {}", e);
                 }
             });
@@ -165,6 +166,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::set_setting,
             commands::request_file_cmd,
             commands::request_files_cmd,
+            commands::send_files_cmd,
             commands::get_transfer_queue,
             commands::get_transfer_history,
             commands::trigger_reindex,
