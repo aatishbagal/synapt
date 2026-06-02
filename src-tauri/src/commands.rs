@@ -218,3 +218,27 @@ pub async fn get_transfer_history(
 ) -> Result<Vec<crate::storage::TransferHistoryRow>, String> {
     state.db.get_transfer_history().await.map_err(|e| e.to_string())
 }
+
+/// Rescan the indexed directories, prune deleted files, and rebuild the index.
+#[tauri::command]
+pub async fn trigger_reindex(state: tauri::State<'_, crate::AppState>) -> Result<u64, String> {
+    let include_hidden = state
+        .db
+        .get_setting("include_hidden")
+        .await
+        .map_err(|e| e.to_string())?
+        .map(|v| v == "true")
+        .unwrap_or(false);
+    let total = crate::search::indexer::run_full_scan(&state.db, include_hidden)
+        .await
+        .map_err(|e| e.to_string())?;
+    crate::search::indexer::prune_deleted(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
+    state
+        .file_index
+        .rebuild_from_db(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(total)
+}

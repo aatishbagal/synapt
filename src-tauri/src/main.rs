@@ -5,6 +5,7 @@ mod network;
 mod trust;
 mod storage;
 mod platform;
+mod search;
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -12,6 +13,7 @@ use tokio::sync::Mutex;
 use crate::network::PeerMap;
 use crate::trust::LocalIdentity;
 use crate::storage::Db;
+use crate::search::index::FileIndex;
 
 /// All live runtime state shared across Tauri commands.
 pub struct AppState {
@@ -23,6 +25,8 @@ pub struct AppState {
     pub pair_tx:      Arc<Mutex<Option<tokio::sync::oneshot::Sender<bool>>>>,
     /// Pending outbound pairing (initiator side, waiting for user confirmation).
     pub pending_pair: Arc<Mutex<Option<crate::network::peer::PendingPairing>>>,
+    /// Full-text file index.
+    pub file_index:   Arc<FileIndex>,
 }
 
 #[tokio::main]
@@ -49,6 +53,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pair_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<bool>>>> = Arc::new(Mutex::new(None));
     let pending_pair: Arc<Mutex<Option<network::peer::PendingPairing>>> = Arc::new(Mutex::new(None));
 
+    let mut index_path = dirs::data_dir().ok_or("no data dir")?;
+    index_path.push("synapt");
+    index_path.push("tantivy_index");
+    let file_index = Arc::new(FileIndex::open(index_path)?);
+
     let state = AppState {
         db:           Arc::clone(&db),
         identity:     Arc::clone(&identity),
@@ -56,6 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         trusted_ids:  Arc::clone(&trusted_ids),
         pair_tx:      Arc::clone(&pair_tx),
         pending_pair: Arc::clone(&pending_pair),
+        file_index:   Arc::clone(&file_index),
     };
 
     tauri::Builder::default()
@@ -84,6 +94,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             });
 
+            // Initial file system scan and full-text index build.
+            let db4 = Arc::clone(&db);
+            let fi = Arc::clone(&file_index);
+            tokio::spawn(async move {
+                let include_hidden = db4
+                    .get_setting("include_hidden")
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|v| v == "true")
+                    .unwrap_or(false);
+                match search::indexer::run_full_scan(&db4, include_hidden).await {
+                    Ok(n) => tracing::info!("indexed {} files", n),
+                    Err(e) => {
+                        tracing::error!("index scan error: {}", e);
+                        return;
+                    }
+                }
+                if let Err(e) = search::indexer::prune_deleted(&db4).await {
+                    tracing::error!("index prune error: {}", e);
+                }
+                match fi.rebuild_from_db(&db4).await {
+                    Ok(n) => tracing::info!("full-text index built with {} docs", n),
+                    Err(e) => tracing::error!("full-text index rebuild error: {}", e),
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -102,6 +139,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::set_setting,
             commands::request_file_cmd,
             commands::get_transfer_history,
+            commands::trigger_reindex,
         ])
         .run(tauri::generate_context!())?;
 

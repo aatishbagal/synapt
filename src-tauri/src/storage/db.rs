@@ -47,6 +47,27 @@ pub struct TransferHistoryRow {
     pub completed_at:   Option<i64>,
 }
 
+/// A row in the files index table.
+#[derive(Debug, sqlx::FromRow, Clone)]
+pub struct FileRow {
+    pub name:          String,
+    pub path:          String,
+    pub parent_path:   String,
+    pub file_type:     String,
+    pub size:          Option<i64>,
+    pub last_modified: Option<i64>,
+    pub extension:     Option<String>,
+    pub is_hidden:     i64,
+}
+
+/// A row in the indexed_dirs table.
+#[derive(Debug, sqlx::FromRow, Clone)]
+pub struct IndexedDirRow {
+    pub path:         String,
+    pub file_count:   i64,
+    pub last_indexed: Option<i64>,
+}
+
 /// Handle to the SQLite connection pool.
 pub struct Db {
     pool: SqlitePool,
@@ -238,5 +259,103 @@ impl Db {
         .fetch_all(&self.pool)
         .await?;
         Ok(rows)
+    }
+
+    /// Insert or replace a single file row in the index.
+    pub async fn upsert_file(&self, row: &FileRow) -> Result<(), DbError> {
+        sqlx::query(
+            "INSERT OR REPLACE INTO files \
+               (name, path, parent_path, type, size, last_modified, extension, is_hidden) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&row.name)
+        .bind(&row.path)
+        .bind(&row.parent_path)
+        .bind(&row.file_type)
+        .bind(row.size)
+        .bind(row.last_modified)
+        .bind(&row.extension)
+        .bind(row.is_hidden)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Delete an indexed file by its absolute path.
+    pub async fn delete_file_by_path(&self, path: &str) -> Result<(), DbError> {
+        sqlx::query("DELETE FROM files WHERE path = ?")
+            .bind(path)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Return every indexed file path.
+    pub async fn get_all_file_paths(&self) -> Result<Vec<String>, DbError> {
+        let paths = sqlx::query_scalar::<_, String>("SELECT path FROM files")
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(paths)
+    }
+
+    /// Return all configured indexed directories.
+    pub async fn get_indexed_dirs(&self) -> Result<Vec<IndexedDirRow>, DbError> {
+        let rows = sqlx::query_as::<_, IndexedDirRow>(
+            "SELECT path, file_count, last_indexed FROM indexed_dirs ORDER BY path",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Update the cached file count and last-indexed time for a directory.
+    pub async fn update_indexed_dir_count(&self, path: &str, count: i64) -> Result<(), DbError> {
+        sqlx::query("UPDATE indexed_dirs SET file_count = ?, last_indexed = unixepoch() WHERE path = ?")
+            .bind(count)
+            .bind(path)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Load every indexed file ordered by name, for rebuilding the full-text index.
+    pub async fn get_all_files_for_index(&self) -> Result<Vec<FileRow>, DbError> {
+        let rows = sqlx::query_as::<_, FileRow>(
+            "SELECT name, path, parent_path, type AS file_type, size, last_modified, \
+                    extension, is_hidden \
+             FROM files ORDER BY name ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Substring search over indexed file names.
+    pub async fn search_files_by_name(
+        &self,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<FileRow>, DbError> {
+        let rows = sqlx::query_as::<_, FileRow>(
+            "SELECT name, path, parent_path, type AS file_type, size, last_modified, \
+                    extension, is_hidden \
+             FROM files WHERE name LIKE ? LIMIT ?",
+        )
+        .bind(format!("%{}%", query))
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Open an in-memory database with migrations applied, for tests only.
+    #[cfg(test)]
+    pub async fn open_in_memory() -> Result<Self, DbError> {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await?;
+        sqlx::migrate!().run(&pool).await?;
+        Ok(Self { pool })
     }
 }
