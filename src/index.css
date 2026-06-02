@@ -1,0 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { font-family: 'Inter', system-ui, sans-serif; font-size: 14px; background: transparent; color: #f0f0f0; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: transparent; overflow: hidden; }
