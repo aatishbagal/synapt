@@ -203,11 +203,66 @@ pub async fn request_file_cmd(
         &download_dir,
         &peer_name,
         &app,
+        &state.transfer_queue,
     )
     .await
     .map_err(|e| e.to_string())?;
 
     Ok(path.to_string_lossy().to_string())
+}
+
+/// Request multiple files from a trusted peer; returns the local download paths.
+#[tauri::command]
+pub async fn request_files_cmd(
+    device_id: String,
+    remote_paths: Vec<String>,
+    state: tauri::State<'_, crate::AppState>,
+    app: tauri::AppHandle,
+) -> Result<Vec<String>, String> {
+    let peers = crate::trust::list_trusted_peers(&state.db).await.map_err(|e| e.to_string())?;
+    let peer = peers
+        .iter()
+        .find(|p| p.device_id.to_string() == device_id)
+        .ok_or_else(|| "peer not trusted".to_string())?;
+    let peer_name = peer.device_name.clone();
+
+    let download_dir = match state.db.get_setting("download_dir").await.map_err(|e| e.to_string())? {
+        Some(d) if !d.is_empty() => std::path::PathBuf::from(d),
+        _ => dirs::download_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("Synapt"),
+    };
+
+    let ip = {
+        let map = lock(&state.peer_map);
+        map.get(&device_id)
+            .map(|e| e.peer.ip)
+            .ok_or_else(|| "peer not online".to_string())?
+    };
+
+    let paths = crate::network::transfer::request_batch_transfer_with_retry(
+        &device_id,
+        ip,
+        remote_paths,
+        &state.identity,
+        &state.db,
+        &download_dir,
+        &peer_name,
+        &app,
+        &state.transfer_queue,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(paths.into_iter().map(|p| p.to_string_lossy().to_string()).collect())
+}
+
+/// Return the in-memory transfer queue, most recent first.
+#[tauri::command]
+pub async fn get_transfer_queue(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<crate::network::QueueEntry>, String> {
+    Ok(state.transfer_queue.list())
 }
 
 /// Get the transfer history, most recent first.

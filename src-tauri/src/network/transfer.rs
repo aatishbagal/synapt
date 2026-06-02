@@ -13,6 +13,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 use crate::network::discovery::TRANSFER_PORT;
+use crate::network::queue::{QueueEntry, QueueStatus, TransferQueue};
 use crate::network::{
     read_enc, session_handshake_client, session_handshake_server, write_enc, SessionError,
 };
@@ -53,8 +54,11 @@ pub enum TransferError {
 #[serde(tag = "type", rename_all = "snake_case")]
 enum TransferMsg {
     TransferRequest { path: String, resume_offset: u64 },
+    BatchTransferRequest { paths: Vec<String> },
     TransferStart { filename: String, size: u64, resume_offset: u64 },
     TransferComplete { checksum: String },
+    FileSkipped { path: String, reason: String },
+    BatchComplete { total_files: u64, skipped: u64 },
     Error { code: String },
 }
 
@@ -127,13 +131,63 @@ async fn handle_server_conn(
 ) -> Result<(), TransferError> {
     let key = session_handshake_server(&mut stream, &identity, &db).await?;
 
-    let (path, resume_offset) =
-        match serde_json::from_slice::<TransferMsg>(&read_enc(&mut stream, &key).await?)? {
-            TransferMsg::TransferRequest { path, resume_offset } => (path, resume_offset),
-            other => return Err(TransferError::Protocol(format!("unexpected {other:?}"))),
-        };
+    match serde_json::from_slice::<TransferMsg>(&read_enc(&mut stream, &key).await?)? {
+        TransferMsg::TransferRequest { path, resume_offset } => {
+            serve_one_file(&mut stream, &key, &path, resume_offset, &db, addr).await
+        }
+        TransferMsg::BatchTransferRequest { paths } => {
+            serve_batch(&mut stream, &key, paths, &db, addr).await
+        }
+        other => Err(TransferError::Protocol(format!("unexpected {other:?}"))),
+    }
+}
 
-    serve_one_file(&mut stream, &key, &path, resume_offset, &db, addr).await
+/// Classify each requested path as allowed/denied against the shared dirs,
+/// preserving request order.
+fn classify_batch(paths: &[String], shared_dirs: &[String]) -> Vec<(String, bool)> {
+    paths
+        .iter()
+        .map(|p| (p.clone(), is_path_allowed(Path::new(p), shared_dirs)))
+        .collect()
+}
+
+/// Serve multiple files sequentially over one session, skipping denied paths.
+async fn serve_batch(
+    stream: &mut TcpStream,
+    key: &[u8; 32],
+    paths: Vec<String>,
+    db: &Db,
+    addr: SocketAddr,
+) -> Result<(), TransferError> {
+    let total_files = paths.len() as u64;
+    let shared_dirs = db.get_shared_dirs().await?;
+    let mut skipped = 0u64;
+
+    for (path, allowed) in classify_batch(&paths, &shared_dirs) {
+        if !allowed {
+            skipped += 1;
+            tracing::warn!("batch transfer: access denied for a path requested from {}", addr);
+            write_enc(
+                stream,
+                key,
+                &serde_json::to_vec(&TransferMsg::FileSkipped {
+                    path,
+                    reason: "access_denied".into(),
+                })?,
+            )
+            .await?;
+            continue;
+        }
+        serve_one_file(stream, key, &path, 0, db, addr).await?;
+    }
+
+    write_enc(
+        stream,
+        key,
+        &serde_json::to_vec(&TransferMsg::BatchComplete { total_files, skipped })?,
+    )
+    .await?;
+    Ok(())
 }
 
 /// Validate, then stream a single requested file over an established session.
@@ -213,7 +267,23 @@ pub async fn request_transfer(
     download_dir: &Path,
     peer_name: &str,
     app: &AppHandle,
+    queue: &TransferQueue,
 ) -> Result<PathBuf, TransferError> {
+    let started_at = chrono::Utc::now().timestamp();
+    queue.push(QueueEntry {
+        transfer_id: transfer_id.to_string(),
+        filename: Path::new(&remote_path)
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "file".into()),
+        remote_path: remote_path.clone(),
+        peer_name: peer_name.to_string(),
+        status: QueueStatus::Queued,
+        bytes_received: resume_offset,
+        total: 0,
+        started_at,
+    });
+
     let mut stream = TcpStream::connect((peer_ip, TRANSFER_PORT)).await?;
 
     let peer_pubkey = {
@@ -287,6 +357,17 @@ pub async fn request_transfer(
         }
     };
 
+    queue.push(QueueEntry {
+        transfer_id: transfer_id.to_string(),
+        filename: filename.clone(),
+        remote_path: remote_path.clone(),
+        peer_name: peer_name.to_string(),
+        status: QueueStatus::InProgress,
+        bytes_received: server_offset,
+        total: size,
+        started_at,
+    });
+
     let mut bytes_received = server_offset;
     while bytes_received < size {
         let chunk = read_enc(&mut stream, &key).await?;
@@ -296,6 +377,7 @@ pub async fn request_transfer(
         file.write_all(&chunk).await?;
         bytes_received += chunk.len() as u64;
         db.update_transfer_status(id, bytes_received, "in_progress", None).await?;
+        queue.update(transfer_id, QueueStatus::InProgress, bytes_received);
         let _ = app.emit(
             "transfer-progress",
             serde_json::json!({
@@ -318,6 +400,7 @@ pub async fn request_transfer(
     let now = chrono::Utc::now().timestamp();
     if actual == checksum {
         db.update_transfer_status(id, bytes_received, "complete", Some(now)).await?;
+        queue.update(transfer_id, QueueStatus::Complete, bytes_received);
         let _ = app.emit(
             "transfer-complete",
             serde_json::json!({
@@ -332,6 +415,11 @@ pub async fn request_transfer(
         tracing::warn!("transfer checksum mismatch for {}", filename);
         let _ = tokio::fs::remove_file(&local_path).await;
         db.update_transfer_status(id, 0, "failed", Some(now)).await?;
+        queue.update(
+            transfer_id,
+            QueueStatus::Failed { reason: "checksum_mismatch".into() },
+            0,
+        );
         let _ = app.emit(
             "transfer-failed",
             serde_json::json!({
@@ -356,6 +444,7 @@ pub async fn request_transfer_with_retry(
     download_dir: &Path,
     peer_device_name: &str,
     app: &AppHandle,
+    queue: &TransferQueue,
 ) -> Result<PathBuf, TransferError> {
     let (transfer_id, mut hist_id, mut resume_offset) =
         match db.find_partial_transfer(peer_device_id, &remote_path).await? {
@@ -381,6 +470,7 @@ pub async fn request_transfer_with_retry(
             download_dir,
             peer_device_name,
             app,
+            queue,
         )
         .await
         {
@@ -397,6 +487,7 @@ pub async fn request_transfer_with_retry(
                     if let Some(id) = hist_id {
                         let _ = db.set_transfer_status(id, "partial").await;
                     }
+                    queue.update(&transfer_id, QueueStatus::Partial, resume_offset);
                     let _ = app.emit(
                         "transfer-retry",
                         serde_json::json!({
@@ -414,22 +505,83 @@ pub async fn request_transfer_with_retry(
                     }
                     attempt += 1;
                 } else {
-                    if let Some(id) = hist_id {
-                        let bytes = db.get_transfer_bytes(id).await.ok().flatten().unwrap_or(0);
-                        let _ = db
-                            .update_transfer_status(
-                                id,
-                                bytes.max(0) as u64,
-                                "failed",
-                                Some(chrono::Utc::now().timestamp()),
-                            )
-                            .await;
-                    }
+                    let bytes = match hist_id {
+                        Some(id) => {
+                            let bytes = db.get_transfer_bytes(id).await.ok().flatten().unwrap_or(0).max(0) as u64;
+                            let _ = db
+                                .update_transfer_status(
+                                    id,
+                                    bytes,
+                                    "failed",
+                                    Some(chrono::Utc::now().timestamp()),
+                                )
+                                .await;
+                            bytes
+                        }
+                        None => 0,
+                    };
+                    queue.update(
+                        &transfer_id,
+                        QueueStatus::Failed { reason: e.to_string() },
+                        bytes,
+                    );
                     return Err(e);
                 }
             }
         }
     }
+}
+
+/// Request multiple files from a peer, each with independent retry. Files that
+/// ultimately fail are skipped; returns the paths of the successful transfers.
+#[allow(clippy::too_many_arguments)]
+pub async fn request_batch_transfer_with_retry(
+    peer_device_id: &str,
+    peer_ip: IpAddr,
+    remote_paths: Vec<String>,
+    identity: &LocalIdentity,
+    db: &Db,
+    download_dir: &Path,
+    peer_device_name: &str,
+    app: &AppHandle,
+    queue: &TransferQueue,
+) -> Result<Vec<PathBuf>, TransferError> {
+    let total_files = remote_paths.len() as u64;
+    let mut skipped = 0u64;
+    let mut paths = Vec::new();
+
+    for remote_path in remote_paths {
+        match request_transfer_with_retry(
+            peer_device_id,
+            peer_ip,
+            remote_path.clone(),
+            identity,
+            db,
+            download_dir,
+            peer_device_name,
+            app,
+            queue,
+        )
+        .await
+        {
+            Ok(path) => paths.push(path),
+            Err(e) => {
+                skipped += 1;
+                tracing::warn!("batch transfer: file {} failed: {}", remote_path, e);
+            }
+        }
+    }
+
+    let _ = app.emit(
+        "batch-complete",
+        serde_json::json!({
+            "total_files": total_files,
+            "skipped": skipped,
+            "peer_name": peer_device_name,
+        }),
+    );
+
+    Ok(paths)
 }
 
 #[cfg(test)]
@@ -494,6 +646,36 @@ mod tests {
         fs::create_dir_all(&shared).unwrap();
         let missing = shared.join("nope.txt");
         assert!(!is_path_allowed(&missing, &[shared.to_string_lossy().to_string()]));
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn batch_with_empty_paths_yields_no_transfers() {
+        let allowed = classify_batch(&[], &["/tmp".to_string()]);
+        assert!(allowed.is_empty());
+    }
+
+    #[test]
+    fn batch_skips_denied_paths_and_keeps_allowed() {
+        let base = unique_base();
+        let shared = base.join("shared");
+        let outside = base.join("outside");
+        fs::create_dir_all(&shared).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let ok = shared.join("ok.txt");
+        let denied = outside.join("secret.txt");
+        fs::write(&ok, b"x").unwrap();
+        fs::write(&denied, b"x").unwrap();
+
+        let dirs = vec![shared.to_string_lossy().to_string()];
+        let classified = classify_batch(
+            &[ok.to_string_lossy().to_string(), denied.to_string_lossy().to_string()],
+            &dirs,
+        );
+        let allowed_count = classified.iter().filter(|(_, a)| *a).count();
+        let denied_count = classified.iter().filter(|(_, a)| !*a).count();
+        assert_eq!(allowed_count, 1);
+        assert_eq!(denied_count, 1);
         let _ = fs::remove_dir_all(&base);
     }
 

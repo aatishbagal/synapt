@@ -11,6 +11,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::network::PeerMap;
+use crate::network::TransferQueue;
 use crate::trust::LocalIdentity;
 use crate::storage::Db;
 use crate::search::index::FileIndex;
@@ -30,6 +31,8 @@ pub struct AppState {
     pub file_index:   Arc<FileIndex>,
     /// Local search engine (Bloom -> Trie -> tantivy -> fuzzy with LRU cache).
     pub search_engine: Arc<SearchEngine>,
+    /// In-memory view of active, queued, and recently completed transfers.
+    pub transfer_queue: Arc<TransferQueue>,
 }
 
 #[tokio::main]
@@ -63,6 +66,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let search_engine =
         Arc::new(SearchEngine::init(Arc::clone(&db), Arc::clone(&file_index)).await?);
 
+    let transfer_queue = Arc::new(TransferQueue::new(100));
+
     let state = AppState {
         db:            Arc::clone(&db),
         identity:      Arc::clone(&identity),
@@ -72,6 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         pending_pair:  Arc::clone(&pending_pair),
         file_index:    Arc::clone(&file_index),
         search_engine: Arc::clone(&search_engine),
+        transfer_queue: Arc::clone(&transfer_queue),
     };
 
     tauri::Builder::default()
@@ -158,6 +164,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::get_setting,
             commands::set_setting,
             commands::request_file_cmd,
+            commands::request_files_cmd,
+            commands::get_transfer_queue,
             commands::get_transfer_history,
             commands::trigger_reindex,
             commands::search_local,

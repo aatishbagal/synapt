@@ -1,6 +1,7 @@
 pub mod discovery;
 pub mod crypto;
 pub mod transfer;
+pub mod queue;
 pub mod peer;
 pub mod search_server;
 
@@ -23,6 +24,8 @@ use crate::trust::LocalIdentity;
 pub use discovery::{PeerMap, PeerEntry, list_peers, start as start_discovery,
                     PAIRING_PORT, SEARCH_PORT, TRANSFER_PORT};
 pub use search_server::start_search_server;
+#[allow(unused_imports)]
+pub use queue::{QueueEntry, QueueStatus, TransferQueue};
 
 /// Errors raised while establishing or using an encrypted session.
 #[derive(Debug, Error)]
