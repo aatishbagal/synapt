@@ -1,8 +1,10 @@
 /// Bloom filter using FNV-1a and DJB2 double hashing as a search pre-filter gate.
 #[derive(Debug, Clone)]
 pub struct BloomFilter {
-    bits:     Vec<bool>,
-    k:        usize,
+    bits: Vec<bool>,
+    k:    usize,
+    /// Configured expected capacity, retained for diagnostics and resizing decisions.
+    #[allow(dead_code)]
     capacity: usize,
 }
 

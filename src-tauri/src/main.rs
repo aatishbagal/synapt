@@ -14,6 +14,7 @@ use crate::network::PeerMap;
 use crate::trust::LocalIdentity;
 use crate::storage::Db;
 use crate::search::index::FileIndex;
+use crate::search::engine::SearchEngine;
 
 /// All live runtime state shared across Tauri commands.
 pub struct AppState {
@@ -27,6 +28,8 @@ pub struct AppState {
     pub pending_pair: Arc<Mutex<Option<crate::network::peer::PendingPairing>>>,
     /// Full-text file index.
     pub file_index:   Arc<FileIndex>,
+    /// Local search engine (Bloom -> Trie -> tantivy -> fuzzy with LRU cache).
+    pub search_engine: Arc<SearchEngine>,
 }
 
 #[tokio::main]
@@ -57,15 +60,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     index_path.push("synapt");
     index_path.push("tantivy_index");
     let file_index = Arc::new(FileIndex::open(index_path)?);
+    let search_engine =
+        Arc::new(SearchEngine::init(Arc::clone(&db), Arc::clone(&file_index)).await?);
 
     let state = AppState {
-        db:           Arc::clone(&db),
-        identity:     Arc::clone(&identity),
+        db:            Arc::clone(&db),
+        identity:      Arc::clone(&identity),
         peer_map,
-        trusted_ids:  Arc::clone(&trusted_ids),
-        pair_tx:      Arc::clone(&pair_tx),
-        pending_pair: Arc::clone(&pending_pair),
-        file_index:   Arc::clone(&file_index),
+        trusted_ids:   Arc::clone(&trusted_ids),
+        pair_tx:       Arc::clone(&pair_tx),
+        pending_pair:  Arc::clone(&pending_pair),
+        file_index:    Arc::clone(&file_index),
+        search_engine: Arc::clone(&search_engine),
     };
 
     tauri::Builder::default()
@@ -94,9 +100,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             });
 
+            // Encrypted remote search server.
+            let db_s = Arc::clone(&db);
+            let id_s = Arc::clone(&identity);
+            let se_s = Arc::clone(&search_engine);
+            tokio::spawn(async move {
+                if let Err(e) = network::start_search_server(id_s, db_s, se_s).await {
+                    tracing::error!("search server error: {}", e);
+                }
+            });
+
             // Initial file system scan and full-text index build.
             let db4 = Arc::clone(&db);
             let fi = Arc::clone(&file_index);
+            let se = Arc::clone(&search_engine);
             tokio::spawn(async move {
                 let include_hidden = db4
                     .get_setting("include_hidden")
@@ -119,6 +136,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Ok(n) => tracing::info!("full-text index built with {} docs", n),
                     Err(e) => tracing::error!("full-text index rebuild error: {}", e),
                 }
+                if let Err(e) = se.rebuild().await {
+                    tracing::error!("search engine rebuild error: {}", e);
+                }
             });
 
             Ok(())
@@ -140,6 +160,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::request_file_cmd,
             commands::get_transfer_history,
             commands::trigger_reindex,
+            commands::search_local,
+            commands::search_remote,
+            commands::evaluate_expr,
         ])
         .run(tauri::generate_context!())?;
 

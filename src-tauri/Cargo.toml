@@ -36,6 +36,7 @@ chrono = { version = "0.4", features = ["serde"] }
 hostname = "0.3"
 local-ip-address = "0.6"
 tantivy = "0.22"
+lru = "0.12"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

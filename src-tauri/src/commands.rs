@@ -240,5 +240,98 @@ pub async fn trigger_reindex(state: tauri::State<'_, crate::AppState>) -> Result
         .rebuild_from_db(&state.db)
         .await
         .map_err(|e| e.to_string())?;
+    state.search_engine.rebuild().await.map_err(|e| e.to_string())?;
     Ok(total)
+}
+
+/// Evaluate an inline arithmetic expression.
+#[tauri::command]
+pub fn evaluate_expr(input: String) -> Result<f64, String> {
+    crate::search::calc::evaluate(&input).map_err(|e| e.to_string())
+}
+
+/// Run a local search and return ranked results.
+#[tauri::command]
+pub async fn search_local(
+    query: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<crate::search::engine::SearchResult>, String> {
+    let max_results = state
+        .db
+        .get_setting("max_results")
+        .await
+        .map_err(|e| e.to_string())?
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(50);
+    state
+        .search_engine
+        .search(&query, max_results)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Search a trusted peer's shared files over the encrypted session channel.
+#[tauri::command]
+pub async fn search_remote(
+    device_id: String,
+    query: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<crate::search::engine::SearchResult>, String> {
+    use crate::network::search_server::SearchMsg;
+    use crate::search::engine::{ResultSource, SearchResult};
+
+    let peers = crate::trust::list_trusted_peers(&state.db).await.map_err(|e| e.to_string())?;
+    let (device_name, peer_pubkey) = peers
+        .iter()
+        .find(|p| p.device_id.to_string() == device_id)
+        .map(|p| (p.device_name.clone(), p.pubkey_b64.clone()))
+        .ok_or_else(|| "peer not trusted".to_string())?;
+
+    let ip = {
+        let map = lock(&state.peer_map);
+        map.get(&device_id)
+            .map(|e| e.peer.ip)
+            .ok_or_else(|| "peer not online".to_string())?
+    };
+
+    let max_results = state
+        .db
+        .get_setting("max_results")
+        .await
+        .map_err(|e| e.to_string())?
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(50);
+
+    let mut stream = tokio::net::TcpStream::connect((ip, crate::network::SEARCH_PORT))
+        .await
+        .map_err(|e| e.to_string())?;
+    let local_id = state.identity.device_id.to_string();
+    let key = crate::network::session_handshake_client(&mut stream, &local_id, &state.identity, &peer_pubkey)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let request = SearchMsg::SearchRequest { query, max_results };
+    crate::network::write_enc(&mut stream, &key, &serde_json::to_vec(&request).map_err(|e| e.to_string())?)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let response: SearchMsg = serde_json::from_slice(
+        &crate::network::read_enc(&mut stream, &key).await.map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+
+    let results = match response {
+        SearchMsg::SearchResults { results } => results,
+        _ => return Err("unexpected response from peer".to_string()),
+    };
+
+    Ok(results
+        .into_iter()
+        .map(|r| SearchResult {
+            name: r.name,
+            path: r.path,
+            source: ResultSource::Remote { device_name: device_name.clone() },
+            score: r.score,
+        })
+        .collect())
 }

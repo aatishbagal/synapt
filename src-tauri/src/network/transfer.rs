@@ -8,14 +8,10 @@ use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tauri::{AppHandle, Emitter};
-use rand::rngs::OsRng;
-use rand::RngCore;
-
-use crate::network::crypto::{
-    decrypt, encrypt, from_b64, read_frame_len, session_key, static_dh, to_b64, write_frame,
-    CryptoError, MAX_FRAME_BYTES,
-};
 use crate::network::discovery::TRANSFER_PORT;
+use crate::network::{
+    read_enc, session_handshake_client, session_handshake_server, write_enc, SessionError,
+};
 use crate::storage::{Db, DbError, TransferHistoryRow};
 use crate::trust::LocalIdentity;
 
@@ -28,30 +24,16 @@ pub enum TransferError {
     Io(#[from] std::io::Error),
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("crypto error: {0}")]
-    Crypto(#[from] CryptoError),
     #[error("access denied")]
     AccessDenied,
     #[error("peer not trusted")]
     NotTrusted,
     #[error("db error: {0}")]
     Db(#[from] DbError),
+    #[error("session error: {0}")]
+    Session(#[from] SessionError),
     #[error("protocol error: {0}")]
     Protocol(String),
-}
-
-/// Plaintext handshake packet sent first by the initiator.
-#[derive(Debug, Serialize, Deserialize)]
-struct HandshakeInit {
-    device_id: String,
-}
-
-/// Plaintext handshake reply from the responder.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum ServerHello {
-    Hello { nonce_b64: String },
-    Rejected,
 }
 
 /// Encrypted control messages exchanged after the session key is established.
@@ -62,40 +44,6 @@ enum TransferMsg {
     TransferStart { filename: String, size: u64 },
     TransferComplete,
     Error { code: String },
-}
-
-fn to_key32(v: Vec<u8>) -> Result<[u8; 32], TransferError> {
-    v.try_into()
-        .map_err(|_| TransferError::Protocol("key/nonce wrong length".into()))
-}
-
-async fn write_plain(stream: &mut TcpStream, bytes: &[u8]) -> Result<(), TransferError> {
-    let frame = write_frame(bytes)?;
-    stream.write_all(&frame).await?;
-    stream.flush().await?;
-    Ok(())
-}
-
-async fn read_plain(stream: &mut TcpStream) -> Result<Vec<u8>, TransferError> {
-    let mut len_buf = [0u8; 4];
-    stream.read_exact(&mut len_buf).await?;
-    let len = read_frame_len(&len_buf);
-    if len > MAX_FRAME_BYTES {
-        return Err(TransferError::Protocol(format!("frame too large: {len}")));
-    }
-    let mut buf = vec![0u8; len];
-    stream.read_exact(&mut buf).await?;
-    Ok(buf)
-}
-
-async fn write_enc(stream: &mut TcpStream, key: &[u8; 32], plaintext: &[u8]) -> Result<(), TransferError> {
-    let ct = encrypt(key, plaintext)?;
-    write_plain(stream, &ct).await
-}
-
-async fn read_enc(stream: &mut TcpStream, key: &[u8; 32]) -> Result<Vec<u8>, TransferError> {
-    let ct = read_plain(stream).await?;
-    Ok(decrypt(key, &ct)?)
 }
 
 /// Returns true if the canonicalised requested path is under any of shared_dirs.
@@ -141,29 +89,7 @@ async fn handle_server_conn(
     identity: Arc<LocalIdentity>,
     db: Arc<Db>,
 ) -> Result<(), TransferError> {
-    let init: HandshakeInit = serde_json::from_slice(&read_plain(&mut stream).await?)?;
-
-    let peers = db.get_trusted_peers().await?;
-    let peer = match peers.iter().find(|p| p.device_id == init.device_id) {
-        Some(p) => p.clone(),
-        None => {
-            tracing::warn!("transfer: rejecting untrusted device from {}", addr);
-            write_plain(&mut stream, &serde_json::to_vec(&ServerHello::Rejected)?).await?;
-            return Ok(());
-        }
-    };
-
-    let their_pub = to_key32(from_b64(&peer.pubkey_b64)?)?;
-    let mut nonce = [0u8; 32];
-    OsRng.fill_bytes(&mut nonce);
-    let shared = static_dh(&identity.privkey_bytes, &their_pub);
-    let key = session_key(&shared, &nonce)?;
-
-    write_plain(
-        &mut stream,
-        &serde_json::to_vec(&ServerHello::Hello { nonce_b64: to_b64(&nonce) })?,
-    )
-    .await?;
+    let key = session_handshake_server(&mut stream, &identity, &db).await?;
 
     let (path, resume_offset) = match serde_json::from_slice::<TransferMsg>(&read_enc(&mut stream, &key).await?)? {
         TransferMsg::TransferRequest { path, resume_offset } => (path, resume_offset),
@@ -217,25 +143,16 @@ pub async fn request_transfer(
 ) -> Result<PathBuf, TransferError> {
     let mut stream = TcpStream::connect((peer_ip, TRANSFER_PORT)).await?;
 
-    write_plain(
-        &mut stream,
-        &serde_json::to_vec(&HandshakeInit { device_id: identity.device_id.to_string() })?,
-    )
-    .await?;
-
-    let nonce = match serde_json::from_slice::<ServerHello>(&read_plain(&mut stream).await?)? {
-        ServerHello::Hello { nonce_b64 } => to_key32(from_b64(&nonce_b64)?)?,
-        ServerHello::Rejected => return Err(TransferError::NotTrusted),
+    let peer_pubkey = {
+        let peers = db.get_trusted_peers().await?;
+        let peer = peers
+            .iter()
+            .find(|p| p.device_id == peer_device_id)
+            .ok_or(TransferError::NotTrusted)?;
+        peer.pubkey_b64.clone()
     };
-
-    let peers = db.get_trusted_peers().await?;
-    let peer = peers
-        .iter()
-        .find(|p| p.device_id == peer_device_id)
-        .ok_or(TransferError::NotTrusted)?;
-    let their_pub = to_key32(from_b64(&peer.pubkey_b64)?)?;
-    let shared = static_dh(&identity.privkey_bytes, &their_pub);
-    let key = session_key(&shared, &nonce)?;
+    let local_id = identity.device_id.to_string();
+    let key = session_handshake_client(&mut stream, &local_id, identity, &peer_pubkey).await?;
 
     write_enc(
         &mut stream,
