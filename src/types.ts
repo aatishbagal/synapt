@@ -22,3 +22,21 @@ export interface TransferProgress {
   bytes_received: number;
   total: number;
 }
+
+export type InputMode = 'local' | 'folder' | 'remote' | 'settings' | 'calc';
+
+export interface ParsedInput {
+  raw: string;
+  mode: InputMode;
+  query: string;
+  deviceName: string | null;
+}
+
+export type ResultSource = 'Local' | { Remote: { device_name: string } };
+
+export interface SearchResult {
+  name: string;
+  path: string;
+  source: ResultSource;
+  score: number;
+}

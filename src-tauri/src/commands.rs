@@ -250,6 +250,29 @@ pub fn evaluate_expr(input: String) -> Result<f64, String> {
     crate::search::calc::evaluate(&input).map_err(|e| e.to_string())
 }
 
+/// Open a file or folder path with the platform's default handler.
+#[tauri::command]
+pub async fn open_file_path(path: String) -> Result<(), String> {
+    use std::process::Command;
+    #[cfg(target_os = "linux")]
+    Command::new("xdg-open").arg(&path).spawn().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "windows")]
+    Command::new("explorer").arg(&path).spawn().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    Command::new("open").arg(&path).spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Hide the main overlay window.
+#[tauri::command]
+pub async fn hide_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    app.get_webview_window("main")
+        .ok_or_else(|| "no window".to_string())?
+        .hide()
+        .map_err(|e| e.to_string())
+}
+
 /// Run a local search and return ranked results.
 #[tauri::command]
 pub async fn search_local(

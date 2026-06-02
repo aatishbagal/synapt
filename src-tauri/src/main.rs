@@ -163,6 +163,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::search_local,
             commands::search_remote,
             commands::evaluate_expr,
+            commands::open_file_path,
+            commands::hide_window,
         ])
         .run(tauri::generate_context!())?;
 
