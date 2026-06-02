@@ -24,8 +24,7 @@ pub fn setup_current() {
     linux::setup();
     #[cfg(target_os = "windows")]
     windows::setup();
-    #[cfg(target_os = "macos")]
-    macos::setup();
+    // macOS setup requires the Tauri App handle and is invoked from main().
 }
 
 /// Detect the current platform at runtime.

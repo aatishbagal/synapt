@@ -265,6 +265,36 @@ pub async fn get_transfer_queue(
     Ok(state.transfer_queue.list())
 }
 
+/// Re-register the global hotkey and persist it to settings.
+#[tauri::command]
+pub async fn set_hotkey(
+    hotkey: String,
+    state: tauri::State<'_, crate::AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    use tauri::Manager;
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+    app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
+    app.global_shortcut()
+        .on_shortcut(hotkey.as_str(), |app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                if let Some(window) = app.get_webview_window("main") {
+                    if window.is_visible().unwrap_or(false) {
+                        let _ = window.hide();
+                    } else {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    state.db.set_setting("hotkey", &hotkey).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Send (push) one or more local files to a trusted peer.
 #[tauri::command]
 pub async fn send_files_cmd(

@@ -9,6 +9,7 @@ mod search;
 
 use std::collections::HashSet;
 use std::sync::Arc;
+use tauri::Manager;
 use tokio::sync::Mutex;
 use crate::network::PeerMap;
 use crate::network::TransferQueue;
@@ -68,6 +69,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let transfer_queue = Arc::new(TransferQueue::new(100));
 
+    let hotkey = db
+        .get_setting("hotkey")
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "ctrl+space".to_string());
+
     let state = AppState {
         db:            Arc::clone(&db),
         identity:      Arc::clone(&identity),
@@ -81,9 +89,71 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(state)
         .setup(move |app| {
             platform::setup_current();
+
+            // macOS: hide the Dock icon (tray-only app).
+            #[cfg(target_os = "macos")]
+            platform::macos::setup(app);
+
+            // System tray. Uses Tauri's built-in tray, which calls NSStatusBar on
+            // macOS and the platform tray on Windows/Linux (no AppIndicator needed).
+            if let Some(icon) = app.default_window_icon().cloned() {
+                use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+                let tray = TrayIconBuilder::with_id("synapt-tray")
+                    .icon(icon)
+                    .tooltip("Synapt")
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            let app = tray.app_handle();
+                            if let Some(window) = app.get_webview_window("main") {
+                                if window.is_visible().unwrap_or(false) {
+                                    let _ = window.hide();
+                                } else {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
+                    })
+                    .build(app);
+                if let Err(e) = tray {
+                    tracing::error!("failed to build system tray: {}", e);
+                }
+            }
+
+            // Global hotkey to toggle the overlay.
+            // Linux X11 uses XGrabKey; Wayland uses the inhibitor protocol and may
+            // require the user to grant permission. macOS uses CGEventTap and will
+            // prompt for Accessibility permission on first registration. Windows uses
+            // RegisterHotKey with no extra setup.
+            {
+                use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+                if let Err(e) = app.global_shortcut().on_shortcut(
+                    hotkey.as_str(),
+                    |app, _shortcut, event| {
+                        if event.state == ShortcutState::Pressed {
+                            if let Some(window) = app.get_webview_window("main") {
+                                if window.is_visible().unwrap_or(false) {
+                                    let _ = window.hide();
+                                } else {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
+                    },
+                ) {
+                    tracing::error!("failed to register global shortcut '{}': {}", hotkey, e);
+                }
+            }
 
             // Pairing responder server.
             let handle = app.handle().clone();
@@ -164,6 +234,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::remove_shared_dir,
             commands::get_setting,
             commands::set_setting,
+            commands::set_hotkey,
             commands::request_file_cmd,
             commands::request_files_cmd,
             commands::send_files_cmd,
