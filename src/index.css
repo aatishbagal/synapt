@@ -59,6 +59,49 @@
   --highlight-text: #78350f;
 }
 
+/* System theme follows the OS preference via prefers-color-scheme. */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --bg: #1a1a1a;
+    --surface: #242424;
+    --surface-hover: #2a2a2a;
+    --border: #333333;
+    --text: #ffffff;
+    --muted: #888888;
+    --accent: #3b82f6;
+    --accent-soft: #1f3a72;
+    --danger: #ef4444;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --warning-bg: #3a2e14;
+    --warning-border: #553c18;
+    --warning-text: #fef08a;
+    --highlight-bg: #854d0e;
+    --highlight-text: #fef08a;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    --bg: #f5f5f5;
+    --surface: #ffffff;
+    --surface-hover: #ececec;
+    --border: #e0e0e0;
+    --text: #111111;
+    --muted: #666666;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --danger: #dc2626;
+    --success: #16a34a;
+    --warning: #d97706;
+    --warning-bg: #fef3c7;
+    --warning-border: #fcd34d;
+    --warning-text: #78350f;
+    --highlight-bg: #fde68a;
+    --highlight-text: #78350f;
+  }
+}
+
 * {
   box-sizing: border-box;
   margin: 0;

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { ArrowLeft } from 'lucide-react';
 import { TrustedPeer } from '../types';
+import { useTheme } from '../hooks/useTheme';
 
 interface LocalIdentity {
   device_id: string;
@@ -138,19 +139,9 @@ function statusBadgeStyle(status: string): React.CSSProperties {
   }
 }
 
-/** Apply a theme to the document root, resolving `system` to the OS preference. */
-function applyTheme(theme: string): void {
-  const resolved =
-    theme === 'system'
-      ? window.matchMedia('(prefers-color-scheme: light)').matches
-        ? 'light'
-        : 'dark'
-      : theme;
-  document.documentElement.setAttribute('data-theme', resolved);
-}
-
 export const Settings: React.FC = () => {
   const nav = useNavigate();
+  const { apply: applyTheme } = useTheme();
 
   const [identity, setIdentity] = useState<LocalIdentity | null>(null);
   const [deviceName, setDeviceName] = useState('');
