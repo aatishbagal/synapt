@@ -11,6 +11,19 @@ interface LocalDevice {
   fingerprint: string;
 }
 
+interface IndexedDir {
+  path: string;
+  file_count: number;
+  last_indexed: number | null;
+}
+
+interface IndexStatus {
+  indexed_dirs_count: number;
+  file_count: number;
+  tantivy_ready: boolean;
+  last_scan: number | null;
+}
+
 interface TransferHistory {
   peer_device_id: string;
   filename: string;
@@ -82,6 +95,10 @@ export const Settings: React.FC = () => {
   const [trusted, setTrusted] = useState<TrustedPeer[]>([]);
   const [sharedDirs, setSharedDirs] = useState<string[]>([]);
   const [newDir, setNewDir] = useState('');
+  const [indexedDirs, setIndexedDirs] = useState<IndexedDir[]>([]);
+  const [newIndexedDir, setNewIndexedDir] = useState('');
+  const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
+  const [rescanning, setRescanning] = useState(false);
   const [maxResults, setMaxResults] = useState('50');
   const [includeHidden, setIncludeHidden] = useState(false);
   const [history, setHistory] = useState<TransferHistory[]>([]);
@@ -93,6 +110,12 @@ export const Settings: React.FC = () => {
   const loadSharedDirs = async () => {
     setSharedDirs(await invoke<string[]>('get_shared_dirs').catch(() => []));
   };
+  const loadIndexedDirs = async () => {
+    setIndexedDirs(await invoke<IndexedDir[]>('get_indexed_dirs').catch(() => []));
+  };
+  const loadIndexStatus = async () => {
+    setIndexStatus(await invoke<IndexStatus>('get_index_status').catch(() => null));
+  };
 
   useEffect(() => {
     (async () => {
@@ -103,6 +126,8 @@ export const Settings: React.FC = () => {
 
       await loadTrusted();
       await loadSharedDirs();
+      await loadIndexedDirs();
+      await loadIndexStatus();
 
       const mr = await invoke<string | null>('get_setting', { key: 'max_results' }).catch(() => null);
       setMaxResults(mr ?? '50');
@@ -181,6 +206,26 @@ export const Settings: React.FC = () => {
     await invoke('remove_shared_dir', { path }).catch(() => undefined);
     await loadSharedDirs();
   };
+  const addIndexedDir = async () => {
+    if (!newIndexedDir.trim()) return;
+    setRescanning(true);
+    await invoke('add_indexed_dir', { path: newIndexedDir.trim() }).catch(() => undefined);
+    setNewIndexedDir('');
+    await loadIndexedDirs();
+    await loadIndexStatus();
+    setRescanning(false);
+  };
+  const removeIndexedDir = async (path: string) => {
+    await invoke('remove_indexed_dir', { path }).catch(() => undefined);
+    await loadIndexedDirs();
+  };
+  const rescan = async () => {
+    setRescanning(true);
+    await invoke('trigger_reindex').catch(() => undefined);
+    await loadIndexedDirs();
+    await loadIndexStatus();
+    setRescanning(false);
+  };
 
   return (
     <div className="w-full h-screen bg-bg p-6 overflow-y-auto">
@@ -240,6 +285,49 @@ export const Settings: React.FC = () => {
             placeholder="/absolute/path/to/dir"
           />
           <button onClick={addDir} className="text-xs px-4 py-1.5 bg-accent text-bg rounded-btn hover:opacity-80 transition-opacity shrink-0">Add</button>
+        </div>
+      </section>
+
+      <section className="mb-8">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className={`${SECTION} mb-0`}>Indexed Directories</h2>
+          <button
+            onClick={rescan}
+            disabled={rescanning}
+            className="text-xs px-3 py-1 border border-border text-text-primary rounded-btn hover:bg-border transition-colors disabled:opacity-50"
+          >
+            {rescanning ? 'Rescanning...' : 'Rescan'}
+          </button>
+        </div>
+        <p className="text-text-muted text-xs mb-2">
+          Directories added here are scanned and searchable from the overlay.
+          {indexStatus && ` ${indexStatus.file_count} files indexed.`}
+        </p>
+        {indexedDirs.length === 0
+          ? <p className="text-text-muted text-xs mb-2">No indexed directories. Add one below to start searching.</p>
+          : (
+            <div className="flex flex-col gap-2 mb-2">
+              {indexedDirs.map(d => (
+                <div key={d.path} className="flex items-center justify-between bg-surface border border-border rounded-card px-4 py-2">
+                  <div className="min-w-0">
+                    <p className="text-text-primary text-sm font-mono break-all">{d.path}</p>
+                    <p className="text-text-muted text-xs">
+                      {d.file_count} files{d.last_indexed ? ` - scanned ${relativeDate(d.last_indexed)}` : ' - not scanned yet'}
+                    </p>
+                  </div>
+                  <button onClick={() => removeIndexedDir(d.path)} className="text-xs px-3 py-1 border border-border text-text-primary rounded-btn hover:bg-border transition-colors shrink-0 ml-2">Remove</button>
+                </div>
+              ))}
+            </div>
+          )}
+        <div className="flex gap-2">
+          <input
+            className={INPUT}
+            value={newIndexedDir}
+            onChange={e => setNewIndexedDir(e.target.value)}
+            placeholder="/absolute/path/to/dir"
+          />
+          <button onClick={addIndexedDir} disabled={rescanning} className="text-xs px-4 py-1.5 bg-accent text-bg rounded-btn hover:opacity-80 transition-opacity shrink-0 disabled:opacity-50">Add</button>
         </div>
       </section>
 

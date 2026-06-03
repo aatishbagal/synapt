@@ -9,7 +9,9 @@ mod search;
 mod share;
 
 use std::collections::HashSet;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use tauri::Emitter;
 use tauri::Manager;
 use tokio::sync::Mutex;
 use crate::network::PeerMap;
@@ -33,6 +35,8 @@ pub struct AppState {
     pub file_index:   Arc<FileIndex>,
     /// Local search engine (Bloom -> Trie -> tantivy -> fuzzy with LRU cache).
     pub search_engine: Arc<SearchEngine>,
+    /// True once the initial scan and full-text index rebuild have completed.
+    pub index_ready: Arc<AtomicBool>,
     /// In-memory view of active, queued, and recently completed transfers.
     pub transfer_queue: Arc<TransferQueue>,
 }
@@ -69,6 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Arc::new(SearchEngine::init(Arc::clone(&db), Arc::clone(&file_index)).await?);
 
     let transfer_queue = Arc::new(TransferQueue::new(100));
+    let index_ready = Arc::new(AtomicBool::new(false));
 
     let hotkey = db
         .get_setting("hotkey")
@@ -86,6 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         pending_pair:  Arc::clone(&pending_pair),
         file_index:    Arc::clone(&file_index),
         search_engine: Arc::clone(&search_engine),
+        index_ready:   Arc::clone(&index_ready),
         transfer_queue: Arc::clone(&transfer_queue),
     };
 
@@ -165,7 +171,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let db4 = Arc::clone(&db);
             let fi = Arc::clone(&file_index);
             let se = Arc::clone(&search_engine);
+            let ready = Arc::clone(&index_ready);
+            let handle3 = app.handle().clone();
             tokio::spawn(async move {
+                let dir_count = db4.get_indexed_dirs().await.map(|d| d.len()).unwrap_or(0);
+                tracing::info!("indexed_dirs: {} directories configured", dir_count);
+                if dir_count == 0 {
+                    // No directories to scan: tell the frontend so it can prompt
+                    // the user to add some in Settings.
+                    let _ = handle3.emit("no-indexed-dirs", ());
+                    ready.store(true, std::sync::atomic::Ordering::Relaxed);
+                    return;
+                }
+
                 let include_hidden = db4
                     .get_setting("include_hidden")
                     .await
@@ -174,7 +192,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .map(|v| v == "true")
                     .unwrap_or(false);
                 match search::indexer::run_full_scan(&db4, include_hidden).await {
-                    Ok(n) => tracing::info!("indexed {} files", n),
+                    Ok(_) => {}
                     Err(e) => {
                         tracing::error!("index scan error: {}", e);
                         return;
@@ -184,12 +202,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tracing::error!("index prune error: {}", e);
                 }
                 match fi.rebuild_from_db(&db4).await {
-                    Ok(n) => tracing::info!("full-text index built with {} docs", n),
+                    Ok(n) => tracing::info!("tantivy: index rebuilt with {} documents", n),
                     Err(e) => tracing::error!("full-text index rebuild error: {}", e),
                 }
                 if let Err(e) = se.rebuild().await {
                     tracing::error!("search engine rebuild error: {}", e);
                 }
+                ready.store(true, std::sync::atomic::Ordering::Relaxed);
             });
 
             Ok(())
@@ -215,6 +234,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::get_transfer_queue,
             commands::get_transfer_history,
             commands::trigger_reindex,
+            commands::get_indexed_dirs,
+            commands::add_indexed_dir,
+            commands::remove_indexed_dir,
+            commands::get_index_status,
             commands::search_local,
             commands::search_remote,
             commands::evaluate_expr,

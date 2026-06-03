@@ -110,11 +110,11 @@ impl SearchEngine {
             return Ok(hit.clone());
         }
 
-        let single_word = q.split_whitespace().nth(1).is_none();
-        if single_word && !lock(&self.bloom).may_contain(&q) {
-            return Ok(Vec::new());
-        }
-
+        // Note: the Bloom filter is keyed on whole file names, but queries are
+        // prefixes (trie), tokens (tantivy), or substrings (fuzzy). A name-keyed
+        // membership test produces false negatives for every one of those paths,
+        // so it must not gate the search. The trie already resolves absent
+        // prefixes in O(prefix length); the bloom is left as diagnostic infra.
         let mut results: Vec<SearchResult> = Vec::new();
         let mut seen: HashSet<String> = HashSet::new();
 
@@ -203,5 +203,37 @@ mod tests {
         assert_eq!(lock(&engine.cache).len(), 1);
         engine.invalidate_cache();
         assert_eq!(lock(&engine.cache).len(), 0);
+    }
+
+    // Regression test for the v0.3.1 file-access bug: nothing was indexed
+    // because no directory was ever added to indexed_dirs. This exercises the
+    // whole pipeline (add dir -> scan -> rebuild -> search) and asserts a query
+    // returns the file.
+    #[tokio::test]
+    async fn pipeline_indexes_added_dir_and_search_finds_file() {
+        use crate::search::indexer;
+
+        let db = Arc::new(Db::open_in_memory().await.unwrap());
+        let work = std::env::temp_dir().join(format!("synapt_pipe_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&work).unwrap();
+        std::fs::write(work.join("quarterly_report.txt"), b"data").unwrap();
+
+        db.add_indexed_dir(&work.to_string_lossy()).await.unwrap();
+        let scanned = indexer::run_full_scan(&db, false).await.unwrap();
+        assert_eq!(scanned, 1, "scan should index exactly one file");
+
+        let idx_dir = std::env::temp_dir().join(format!("synapt_pipe_idx_{}", uuid::Uuid::new_v4()));
+        let index = Arc::new(FileIndex::open(idx_dir).unwrap());
+        index.rebuild_from_db(&db).await.unwrap();
+        let engine = SearchEngine::init(Arc::clone(&db), index).await.unwrap();
+
+        let results = engine.search("quarterly", 50).await.unwrap();
+        assert!(
+            results.iter().any(|r| r.name == "quarterly_report.txt"),
+            "search should find the indexed file, got {:?}",
+            results
+        );
+
+        std::fs::remove_dir_all(&work).ok();
     }
 }

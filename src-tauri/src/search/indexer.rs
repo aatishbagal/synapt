@@ -19,12 +19,14 @@ pub enum IndexError {
 /// Scan every configured indexed directory and populate the files table.
 pub async fn run_full_scan(db: &Db, include_hidden: bool) -> Result<u64, IndexError> {
     let dirs = db.get_indexed_dirs().await?;
+    tracing::info!("indexer: starting full scan over {} directories", dirs.len());
     let mut total = 0u64;
     for dir in dirs {
         let count = scan_dir(db, Path::new(&dir.path), include_hidden).await?;
         db.update_indexed_dir_count(&dir.path, count as i64).await?;
         total += count;
     }
+    tracing::info!("indexer: scan complete, {} files indexed", total);
     Ok(total)
 }
 
@@ -36,22 +38,44 @@ fn scan_dir<'a>(
 ) -> Pin<Box<dyn Future<Output = Result<u64, IndexError>> + Send + 'a>> {
     Box::pin(async move {
         let mut count = 0u64;
-        let mut entries = tokio::fs::read_dir(dir).await?;
-        while let Some(entry) = entries.next_entry().await? {
+        // An unreadable directory (e.g. permission denied) must not abort the
+        // entire scan. Log it and skip this branch.
+        let mut entries = match tokio::fs::read_dir(dir).await {
+            Ok(e) => e,
+            Err(e) => {
+                tracing::warn!("indexer: cannot read dir {}: {}", dir.display(), e);
+                return Ok(0);
+            }
+        };
+        loop {
+            let entry = match entries.next_entry().await {
+                Ok(Some(entry)) => entry,
+                Ok(None) => break,
+                Err(e) => {
+                    tracing::warn!("indexer: error reading entry in {}: {}", dir.display(), e);
+                    continue;
+                }
+            };
             let name = entry.file_name().to_string_lossy().to_string();
             let is_hidden = name.starts_with('.');
             if is_hidden && !include_hidden {
                 continue;
             }
-            let file_type = entry.file_type().await?;
+            let file_type = match entry.file_type().await {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
             if file_type.is_symlink() {
                 continue;
             }
             let path = entry.path();
             if file_type.is_dir() {
-                count += scan_dir(db, &path, include_hidden).await?;
+                count += scan_dir(db, &path, include_hidden).await.unwrap_or(0);
             } else if file_type.is_file() {
-                let meta = entry.metadata().await?;
+                let meta = match entry.metadata().await {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
                 if meta.len() > MAX_FILE_SIZE_BYTES {
                     continue;
                 }

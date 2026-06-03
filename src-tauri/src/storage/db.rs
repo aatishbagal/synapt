@@ -62,7 +62,7 @@ pub struct FileRow {
 }
 
 /// A row in the indexed_dirs table.
-#[derive(Debug, sqlx::FromRow, Clone)]
+#[derive(Debug, sqlx::FromRow, Clone, serde::Serialize)]
 pub struct IndexedDirRow {
     pub path:         String,
     pub file_count:   i64,
@@ -348,6 +348,40 @@ impl Db {
         .fetch_all(&self.pool)
         .await?;
         Ok(rows)
+    }
+
+    /// Add a directory to the search index set. No-op if already present.
+    pub async fn add_indexed_dir(&self, path: &str) -> Result<(), DbError> {
+        sqlx::query("INSERT OR IGNORE INTO indexed_dirs (path) VALUES (?)")
+            .bind(path)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Remove a directory from the search index set.
+    pub async fn remove_indexed_dir(&self, path: &str) -> Result<(), DbError> {
+        sqlx::query("DELETE FROM indexed_dirs WHERE path = ?")
+            .bind(path)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Count the total number of indexed files.
+    pub async fn count_files(&self) -> Result<i64, DbError> {
+        let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM files")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(count)
+    }
+
+    /// Most recent last_indexed timestamp across all indexed directories.
+    pub async fn get_last_scan(&self) -> Result<Option<i64>, DbError> {
+        let ts = sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(last_indexed) FROM indexed_dirs")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(ts)
     }
 
     /// Update the cached file count and last-indexed time for a directory.

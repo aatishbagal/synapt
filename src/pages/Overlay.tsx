@@ -30,6 +30,7 @@ export const Overlay: React.FC = () => {
 
   const [selectedPeerForSend, setSelectedPeerForSend] = useState<Peer | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [noIndexedDirs, setNoIndexedDirs] = useState(false);
 
   const nav = useNavigate();
 
@@ -45,6 +46,19 @@ export const Overlay: React.FC = () => {
 
   useEffect(() => {
     const unlisten = listen<IncomingPair>('pair-request', e => setIncomingPair(e.payload));
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, []);
+
+  // Surface a prompt when no directories are configured for indexing, so an
+  // empty result list is not mistaken for a broken search.
+  useEffect(() => {
+    interface IndexStatus { indexed_dirs_count: number }
+    invoke<IndexStatus>('get_index_status')
+      .then(s => setNoIndexedDirs(s.indexed_dirs_count === 0))
+      .catch(() => undefined);
+    const unlisten = listen('no-indexed-dirs', () => setNoIndexedDirs(true));
     return () => {
       unlisten.then(fn => fn());
     };
@@ -209,9 +223,18 @@ export const Overlay: React.FC = () => {
         {error && <p className="text-red-400 text-xs px-4 py-2">{error}</p>}
         {loading && <p className="text-text-muted text-xs text-center py-4">Searching...</p>}
         {!loading && !error && results.length === 0 && hasQuery && parsedInput.mode !== 'calc' && (
-          <p className="text-text-muted text-xs text-center py-6">
-            No results for "{parsedInput.query}"
-          </p>
+          noIndexedDirs ? (
+            <button
+              onClick={() => nav('/settings')}
+              className="text-text-muted hover:text-text-primary transition-colors text-xs text-center py-6 w-full"
+            >
+              Add directories to index in Settings to start searching
+            </button>
+          ) : (
+            <p className="text-text-muted text-xs text-center py-6">
+              No results for "{parsedInput.query}"
+            </p>
+          )
         )}
         {results.length > 0 && (
           <ResultList

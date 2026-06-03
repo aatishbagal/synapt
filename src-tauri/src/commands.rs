@@ -369,8 +369,89 @@ pub async fn trigger_reindex(state: tauri::State<'_, crate::AppState>) -> Result
         .rebuild_from_db(&state.db)
         .await
         .map_err(|e| e.to_string())?;
+    tracing::info!("tantivy: index rebuilt after reindex");
     state.search_engine.rebuild().await.map_err(|e| e.to_string())?;
+    state
+        .index_ready
+        .store(true, std::sync::atomic::Ordering::Relaxed);
     Ok(total)
+}
+
+/// List the directories currently configured for the search index.
+#[tauri::command]
+pub async fn get_indexed_dirs(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<crate::storage::IndexedDirRow>, String> {
+    state.db.get_indexed_dirs().await.map_err(|e| e.to_string())
+}
+
+/// Add a directory to the search index and rescan it in the background.
+#[tauri::command]
+pub async fn add_indexed_dir(
+    path: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.is_dir() {
+        return Err(format!("not a directory: {}", path));
+    }
+    state.db.add_indexed_dir(&path).await.map_err(|e| e.to_string())?;
+    // Rescan in the foreground so the caller can refresh results immediately.
+    let include_hidden = state
+        .db
+        .get_setting("include_hidden")
+        .await
+        .map_err(|e| e.to_string())?
+        .map(|v| v == "true")
+        .unwrap_or(false);
+    crate::search::indexer::run_full_scan(&state.db, include_hidden)
+        .await
+        .map_err(|e| e.to_string())?;
+    state
+        .file_index
+        .rebuild_from_db(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
+    state.search_engine.rebuild().await.map_err(|e| e.to_string())?;
+    state
+        .index_ready
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
+
+/// Remove a directory from the search index. Indexed files are pruned on next scan.
+#[tauri::command]
+pub async fn remove_indexed_dir(
+    path: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<(), String> {
+    state.db.remove_indexed_dir(&path).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Current state of the file index, for surfacing in Settings and the overlay.
+#[derive(serde::Serialize)]
+pub struct IndexStatus {
+    pub indexed_dirs_count: usize,
+    pub file_count: i64,
+    pub tantivy_ready: bool,
+    pub last_scan: Option<i64>,
+}
+
+/// Report the current file index status.
+#[tauri::command]
+pub async fn get_index_status(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<IndexStatus, String> {
+    let dirs = state.db.get_indexed_dirs().await.map_err(|e| e.to_string())?;
+    let file_count = state.db.count_files().await.map_err(|e| e.to_string())?;
+    let last_scan = state.db.get_last_scan().await.map_err(|e| e.to_string())?;
+    Ok(IndexStatus {
+        indexed_dirs_count: dirs.len(),
+        file_count,
+        tantivy_ready: state.index_ready.load(std::sync::atomic::Ordering::Relaxed),
+        last_scan,
+    })
 }
 
 /// Evaluate an inline arithmetic expression.
