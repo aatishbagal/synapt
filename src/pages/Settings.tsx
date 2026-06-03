@@ -158,6 +158,7 @@ export const Settings: React.FC = () => {
   const [downloadDir, setDownloadDir] = useState('');
   const [maxResults, setMaxResults] = useState('50');
   const [includeHidden, setIncludeHidden] = useState(false);
+  const [notifications, setNotifications] = useState(true);
   const [theme, setTheme] = useState('dark');
 
   const [history, setHistory] = useState<TransferHistory[]>([]);
@@ -181,6 +182,7 @@ export const Settings: React.FC = () => {
       const settings = await invoke<Record<string, string>>('get_all_settings').catch(() => ({} as Record<string, string>));
       setMaxResults(settings.max_results ?? '50');
       setIncludeHidden(settings.include_hidden === 'true');
+      setNotifications(settings.notifications_enabled !== 'false');
       setDownloadDir(settings.download_dir ?? '');
       setHotkey(settings.hotkey ?? 'ctrl+space');
       const t = settings.theme ?? 'dark';
@@ -307,6 +309,10 @@ export const Settings: React.FC = () => {
   const toggleIncludeHidden = async (checked: boolean) => {
     setIncludeHidden(checked);
     await invoke('set_setting', { key: 'include_hidden', value: String(checked) }).catch(() => undefined);
+  };
+  const toggleNotifications = async (checked: boolean) => {
+    setNotifications(checked);
+    await invoke('set_setting', { key: 'notifications_enabled', value: String(checked) }).catch(() => undefined);
   };
   const changeTheme = async (value: string) => {
     setTheme(value);
@@ -503,6 +509,16 @@ export const Settings: React.FC = () => {
                 style={{ accentColor: 'var(--accent)' }}
               />
               <span className="text-xs" style={{ color: 'var(--text)' }}>Include hidden files</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={notifications}
+                onChange={e => toggleNotifications(e.target.checked)}
+                style={{ accentColor: 'var(--accent)' }}
+              />
+              <span className="text-xs" style={{ color: 'var(--text)' }}>System notifications</span>
             </label>
 
             <label className="flex items-center justify-between">

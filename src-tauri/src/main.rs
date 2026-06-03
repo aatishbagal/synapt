@@ -7,10 +7,13 @@ mod storage;
 mod platform;
 mod search;
 mod share;
+mod notify;
 
 use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::OnceLock;
+use tauri::AppHandle;
 use tauri::Emitter;
 use tauri::Manager;
 use tokio::sync::Mutex;
@@ -64,11 +67,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let discovery_name = Arc::new(std::sync::Mutex::new(identity.device_name.clone()));
     let rebroadcast = Arc::new(AtomicBool::new(false));
+    // The AppHandle does not exist until setup() runs, so discovery receives a
+    // deferred handle it reads once available (to notify on trusted peers coming online).
+    let discovery_app_handle: Arc<OnceLock<AppHandle>> = Arc::new(OnceLock::new());
     let peer_map = network::start_discovery(
         identity.device_id,
         Arc::clone(&discovery_name),
         Arc::clone(&trusted_ids),
         Arc::clone(&rebroadcast),
+        Arc::clone(&db),
+        Arc::clone(&discovery_app_handle),
     )?;
 
     let pair_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<bool>>>> = Arc::new(Mutex::new(None));
@@ -113,9 +121,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(state)
         .setup(move |app| {
             platform::setup_current();
+
+            // Hand the discovery thread a live AppHandle for presence notifications.
+            let _ = discovery_app_handle.set(app.handle().clone());
 
             // macOS: hide the Dock icon (tray-only app).
             #[cfg(target_os = "macos")]

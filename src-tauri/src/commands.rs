@@ -72,6 +72,7 @@ pub async fn begin_pairing_cmd(
 #[tauri::command]
 pub async fn confirm_pairing_cmd(
     state: tauri::State<'_, crate::AppState>,
+    app: tauri::AppHandle,
 ) -> Result<synapt_core::TrustedPeer, String> {
     let pending = state
         .pending_pair
@@ -86,6 +87,9 @@ pub async fn confirm_pairing_cmd(
             .map_err(|e| e.to_string())?
     };
     lock(&state.trusted_ids).insert(peer.device_id.to_string());
+    if crate::notify::enabled(&state.db).await {
+        crate::notify::peer_paired(&app, &peer.device_name);
+    }
     Ok(peer)
 }
 

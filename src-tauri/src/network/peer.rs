@@ -287,5 +287,8 @@ async fn handle_responder(
         last_seen: None,
     };
     app.emit("pair-complete", &trusted)?;
+    if crate::notify::enabled(&db).await {
+        crate::notify::peer_paired(&app, &trusted.device_name);
+    }
     Ok(())
 }
