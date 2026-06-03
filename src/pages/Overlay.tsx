@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { Settings as SettingsIcon } from 'lucide-react';
 import { PeerCard } from '../components/PeerCard';
 import { PairingDialog } from '../components/PairingDialog';
 import { SearchBar } from '../components/SearchBar';
@@ -197,43 +198,75 @@ export const Overlay: React.FC = () => {
       }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
-      className={`w-full h-screen bg-bg flex flex-col focus:outline-none ${
-        dragOver ? 'ring-2 ring-accent' : ''
-      }`}
+      className="flex flex-col w-screen h-screen overflow-hidden focus:outline-none relative"
+      style={{
+        backgroundColor: 'var(--bg)',
+        color: 'var(--text)',
+        borderRadius: '8px',
+        boxShadow: dragOver ? 'inset 0 0 0 2px var(--accent)' : 'none',
+      }}
     >
-      <div className="flex items-center justify-between px-4 pt-3 pb-2">
-        <span className="text-text-primary text-sm font-medium">Synapt</span>
+      <div
+        className="flex items-center justify-between px-3 shrink-0"
+        style={{
+          height: '40px',
+          borderBottom: '1px solid var(--border)',
+          backgroundColor: 'var(--bg)',
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <img
+            src="/assets/images/logo/png/SynaptV2_White_PNG.png"
+            alt="Synapt"
+            className="h-4 w-4"
+          />
+          <span className="text-xs font-medium">Synapt</span>
+        </div>
         <button
+          type="button"
           onClick={() => nav('/settings')}
-          className="text-text-muted hover:text-text-primary transition-colors text-xs"
+          title="Settings"
+          className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors"
+          style={{ color: 'var(--muted)' }}
         >
-          Settings
+          <SettingsIcon size={12} />
         </button>
       </div>
 
-      <div className="px-4 pb-2">
-        <SearchBar
-          onInput={setParsedInput}
-          onArrowDown={() => results.length > 0 && setSelectedIndex(0)}
-          onEscape={() => invoke('hide_window').catch(() => {})}
-        />
-      </div>
+      <SearchBar
+        onInput={setParsedInput}
+        onArrowDown={() => results.length > 0 && setSelectedIndex(0)}
+        onEscape={() => invoke('hide_window').catch(() => {})}
+      />
 
-      <div className="flex-1 overflow-y-auto px-4 max-h-[18rem]">
-        {error && <p className="text-red-400 text-xs px-4 py-2">{error}</p>}
-        {loading && <p className="text-text-muted text-xs text-center py-4">Searching...</p>}
+      <div className="flex-1 overflow-y-auto">
+        {error && (
+          <p className="text-xs px-3 py-2" style={{ color: 'var(--danger)' }}>
+            {error}
+          </p>
+        )}
+        {loading && (
+          <p className="text-sm text-center py-6" style={{ color: 'var(--muted)' }}>
+            Searching...
+          </p>
+        )}
         {!loading && !error && results.length === 0 && hasQuery && parsedInput.mode !== 'calc' && (
           noIndexedDirs ? (
-            <button
-              onClick={() => nav('/settings')}
-              className="text-text-muted hover:text-text-primary transition-colors text-xs text-center py-6 w-full"
-            >
-              Add directories to index in Settings to start searching
-            </button>
+            <div className="flex-1 flex items-center justify-center py-8">
+              <button
+                onClick={() => nav('/settings')}
+                className="text-sm transition-colors"
+                style={{ color: 'var(--muted)' }}
+              >
+                Add directories to index in Settings to start searching
+              </button>
+            </div>
           ) : (
-            <p className="text-text-muted text-xs text-center py-6">
-              No results for "{parsedInput.query}"
-            </p>
+            <div className="flex items-center justify-center py-8">
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>
+                No results for &ldquo;{parsedInput.query}&rdquo;
+              </p>
+            </div>
           )
         )}
         {results.length > 0 && (
@@ -246,10 +279,21 @@ export const Overlay: React.FC = () => {
         )}
       </div>
 
-      <div className="border-t border-border px-4 py-3 flex flex-col gap-2 max-h-[14rem] overflow-y-auto">
-        <span className="text-text-muted text-xs">Devices</span>
+      <div
+        className="shrink-0 overflow-y-auto"
+        style={{
+          borderTop: '1px solid var(--border)',
+          backgroundColor: 'var(--bg)',
+          maxHeight: '14rem',
+        }}
+      >
+        <div className="px-3 pt-2 pb-1">
+          <h2 className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
+            Devices
+          </h2>
+        </div>
         {peers.length === 0 ? (
-          <p className="text-text-muted text-xs text-center py-2">
+          <p className="text-sm text-center py-4" style={{ color: 'var(--muted)' }}>
             No devices found on local network
           </p>
         ) : (
@@ -264,15 +308,17 @@ export const Overlay: React.FC = () => {
             />
           ))
         )}
-        {!selectedPeerForSend ? (
-          <p className="text-text-muted text-xs">
-            Select a trusted device to send files via drag-and-drop
-          </p>
-        ) : (
-          <p className="text-accent text-xs">
-            Drop files to send to {selectedPeerForSend.device_name}
-          </p>
-        )}
+        <div className="px-3 py-2">
+          {!selectedPeerForSend ? (
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>
+              Select a trusted device to send files via drag-and-drop
+            </p>
+          ) : (
+            <p className="text-xs" style={{ color: 'var(--accent)' }}>
+              Drop files to send to {selectedPeerForSend.device_name}
+            </p>
+          )}
+        </div>
       </div>
 
       {pairingPeer && (

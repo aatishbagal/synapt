@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { ArrowLeft } from 'lucide-react';
 import { QueueEntry, TrustedPeer } from '../types';
 
 interface LocalDevice {
@@ -36,8 +37,35 @@ interface TransferHistory {
   completed_at: number | null;
 }
 
-const SECTION = 'text-text-muted text-xs uppercase tracking-wider mb-2';
-const INPUT = 'bg-border border border-border text-text-primary rounded-btn px-3 py-1.5 text-sm w-full';
+const inputStyle: React.CSSProperties = {
+  backgroundColor: 'var(--surface)',
+  color: 'var(--text)',
+  border: '1px solid var(--border)',
+};
+
+const subtleButton: React.CSSProperties = {
+  backgroundColor: 'var(--surface)',
+  color: 'var(--text)',
+  border: '1px solid var(--border)',
+};
+
+const accentButton: React.CSSProperties = {
+  backgroundColor: 'var(--surface-hover)',
+  color: 'var(--accent)',
+  border: '1px solid var(--accent)',
+};
+
+const dangerButton: React.CSSProperties = {
+  backgroundColor: 'var(--surface)',
+  color: 'var(--danger)',
+  border: '1px solid var(--border)',
+};
+
+const itemCard: React.CSSProperties = {
+  backgroundColor: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: '8px',
+};
 
 function relativeDate(unixSeconds: number): string {
   const diff = Date.now() - unixSeconds * 1000;
@@ -70,20 +98,19 @@ function statusLabel(s: QueueStatus): string {
   return isFailed(s) ? 'Failed' : s;
 }
 
-function statusBadgeClass(s: QueueStatus): string {
-  const base = 'text-xs rounded px-2 py-0.5';
-  if (isFailed(s)) return `${base} bg-red-900/30 text-red-400`;
+function statusBadgeStyle(s: QueueStatus): React.CSSProperties {
+  const base: React.CSSProperties = { backgroundColor: 'var(--surface-hover)' };
+  if (isFailed(s)) return { ...base, color: 'var(--danger)', border: '1px solid var(--border)' };
   switch (s) {
-    case 'Queued':
-      return `${base} bg-border text-text-muted`;
     case 'InProgress':
-      return `${base} bg-accent/10 text-accent`;
+      return { ...base, color: 'var(--accent)', border: '1px solid var(--accent)' };
     case 'Complete':
-      return `${base} bg-green-900/30 text-green-400`;
+      return { ...base, color: 'var(--success)', border: '1px solid var(--border)' };
     case 'Partial':
-      return `${base} bg-yellow-900/30 text-yellow-400`;
+      return { ...base, color: 'var(--warning)', border: '1px solid var(--border)' };
+    case 'Queued':
     default:
-      return `${base} bg-border text-text-muted`;
+      return { ...base, color: 'var(--muted)', border: '1px solid var(--border)' };
   }
 }
 
@@ -228,191 +255,245 @@ export const Settings: React.FC = () => {
   };
 
   return (
-    <div className="w-full h-screen bg-bg p-6 overflow-y-auto">
-      <button onClick={() => nav('/')} className="text-text-muted text-sm mb-6 hover:text-text-primary transition-colors">Back</button>
-
-      <section className="mb-8">
-        <h2 className={SECTION}>Device</h2>
-        <div className="flex flex-col gap-3">
-          <input
-            className={INPUT}
-            value={deviceName}
-            onChange={e => setDeviceName(e.target.value)}
-            onBlur={saveDeviceName}
-            placeholder="Device name"
+    <div
+      className="flex flex-col w-screen h-screen overflow-hidden"
+      style={{ backgroundColor: 'var(--bg)', color: 'var(--text)', borderRadius: '8px' }}
+    >
+      <div
+        className="flex items-center justify-between px-3 shrink-0"
+        style={{ height: '40px', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg)' }}
+      >
+        <div className="flex items-center gap-2">
+          <img
+            src="/assets/images/logo/png/SynaptV2_White_PNG.png"
+            alt="Synapt"
+            className="h-4 w-4"
           />
-          <p className="text-text-muted text-xs font-mono">ID: {local ? local.device_id.slice(0, 18) : '...'}</p>
-          <p className="text-text-muted text-xs font-mono">Fingerprint: {local ? local.fingerprint.slice(0, 16) : '...'}</p>
+          <span className="text-xs font-medium">Synapt Settings</span>
         </div>
-      </section>
+        <button
+          type="button"
+          onClick={() => nav('/')}
+          title="Back"
+          className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors"
+          style={{ color: 'var(--muted)' }}
+        >
+          <ArrowLeft size={12} />
+          Back
+        </button>
+      </div>
 
-      <section className="mb-8">
-        <h2 className={SECTION}>Trusted Devices</h2>
-        {trusted.length === 0
-          ? <p className="text-text-muted text-xs">No trusted devices. Pair with a device from the main screen.</p>
-          : (
+      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-5">
+        <Section title="Device">
+          <div className="flex flex-col gap-3 px-3 py-2 rounded" style={itemCard}>
+            <input
+              className="rounded px-2 py-1 text-xs w-full"
+              style={inputStyle}
+              value={deviceName}
+              onChange={e => setDeviceName(e.target.value)}
+              onBlur={saveDeviceName}
+              placeholder="Device name"
+            />
+            <p className="text-xs" style={{ color: 'var(--muted)', fontFamily: 'monospace' }}>
+              ID: {local ? local.device_id.slice(0, 18) : '...'}
+            </p>
+            <p className="text-xs" style={{ color: 'var(--muted)', fontFamily: 'monospace' }}>
+              Fingerprint: {local ? local.fingerprint.slice(0, 16) : '...'}
+            </p>
+          </div>
+        </Section>
+
+        <Section title="Trusted Devices">
+          {trusted.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>
+              No trusted devices. Pair with a device from the main screen.
+            </p>
+          ) : (
             <div className="flex flex-col gap-2">
               {trusted.map(p => (
-                <div key={p.device_id} className="flex items-center justify-between bg-surface border border-border rounded-card px-4 py-2">
-                  <div>
-                    <p className="text-text-primary text-sm font-medium">{p.device_name}</p>
-                    <p className="text-text-muted text-xs font-mono">{p.fingerprint.slice(0, 16)}</p>
-                    <p className="text-text-muted text-xs">paired {relativeDate(p.paired_at)}</p>
+                <div key={p.device_id} className="flex items-center justify-between px-3 py-2" style={itemCard}>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{p.device_name}</p>
+                    <p className="text-xs" style={{ color: 'var(--muted)', fontFamily: 'monospace' }}>{p.fingerprint.slice(0, 16)}</p>
+                    <p className="text-xs" style={{ color: 'var(--muted)' }}>paired {relativeDate(p.paired_at)}</p>
                   </div>
-                  <button onClick={() => removePeer(p.device_id)} className="text-xs px-3 py-1 border border-border text-text-primary rounded-btn hover:bg-border transition-colors">Remove</button>
+                  <button onClick={() => removePeer(p.device_id)} className="rounded px-2 py-1 text-xs shrink-0 ml-2 transition-colors" style={dangerButton}>Remove</button>
                 </div>
               ))}
             </div>
           )}
-      </section>
+        </Section>
 
-      <section className="mb-8">
-        <h2 className={SECTION}>Shared Directories</h2>
-        <p className="text-text-muted text-xs mb-2">Only directories added here are accessible to trusted peers.</p>
-        <div className="flex flex-col gap-2 mb-2">
-          {sharedDirs.map(d => (
-            <div key={d} className="flex items-center justify-between bg-surface border border-border rounded-card px-4 py-2">
-              <p className="text-text-primary text-sm font-mono break-all">{d}</p>
-              <button onClick={() => removeDir(d)} className="text-xs px-3 py-1 border border-border text-text-primary rounded-btn hover:bg-border transition-colors shrink-0 ml-2">Remove</button>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <input
-            className={INPUT}
-            value={newDir}
-            onChange={e => setNewDir(e.target.value)}
-            placeholder="/absolute/path/to/dir"
-          />
-          <button onClick={addDir} className="text-xs px-4 py-1.5 bg-accent text-bg rounded-btn hover:opacity-80 transition-opacity shrink-0">Add</button>
-        </div>
-      </section>
+        <Section title="Shared Directories">
+          <p className="text-xs" style={{ color: 'var(--muted)' }}>Only directories added here are accessible to trusted peers.</p>
+          <div className="flex flex-col gap-2">
+            {sharedDirs.map(d => (
+              <div key={d} className="flex items-center justify-between px-3 py-2" style={itemCard}>
+                <p className="text-xs break-all" style={{ color: 'var(--text)', fontFamily: 'monospace' }}>{d}</p>
+                <button onClick={() => removeDir(d)} className="rounded px-2 py-1 text-xs shrink-0 ml-2 transition-colors" style={dangerButton}>Remove</button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              className="flex-1 rounded px-2 py-1 text-xs"
+              style={inputStyle}
+              value={newDir}
+              onChange={e => setNewDir(e.target.value)}
+              placeholder="/absolute/path/to/dir"
+            />
+            <button onClick={addDir} className="rounded px-2 py-1 text-xs shrink-0 transition-colors" style={subtleButton}>Add</button>
+          </div>
+        </Section>
 
-      <section className="mb-8">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className={`${SECTION} mb-0`}>Indexed Directories</h2>
-          <button
-            onClick={rescan}
-            disabled={rescanning}
-            className="text-xs px-3 py-1 border border-border text-text-primary rounded-btn hover:bg-border transition-colors disabled:opacity-50"
-          >
-            {rescanning ? 'Rescanning...' : 'Rescan'}
-          </button>
-        </div>
-        <p className="text-text-muted text-xs mb-2">
-          Directories added here are scanned and searchable from the overlay.
-          {indexStatus && ` ${indexStatus.file_count} files indexed.`}
-        </p>
-        {indexedDirs.length === 0
-          ? <p className="text-text-muted text-xs mb-2">No indexed directories. Add one below to start searching.</p>
-          : (
-            <div className="flex flex-col gap-2 mb-2">
+        <Section
+          title="Indexed Directories"
+          action={
+            <button
+              onClick={rescan}
+              disabled={rescanning}
+              className="rounded px-2 py-1 text-xs transition-colors disabled:opacity-50"
+              style={subtleButton}
+            >
+              {rescanning ? 'Rescanning...' : 'Rescan'}
+            </button>
+          }
+        >
+          <p className="text-xs" style={{ color: 'var(--muted)' }}>
+            Directories added here are scanned and searchable from the overlay.
+            {indexStatus && ` ${indexStatus.file_count} files indexed.`}
+          </p>
+          {indexedDirs.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>No indexed directories. Add one below to start searching.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
               {indexedDirs.map(d => (
-                <div key={d.path} className="flex items-center justify-between bg-surface border border-border rounded-card px-4 py-2">
+                <div key={d.path} className="flex items-center justify-between px-3 py-2" style={itemCard}>
                   <div className="min-w-0">
-                    <p className="text-text-primary text-sm font-mono break-all">{d.path}</p>
-                    <p className="text-text-muted text-xs">
+                    <p className="text-xs break-all" style={{ color: 'var(--text)', fontFamily: 'monospace' }}>{d.path}</p>
+                    <p className="text-xs" style={{ color: 'var(--muted)' }}>
                       {d.file_count} files{d.last_indexed ? ` - scanned ${relativeDate(d.last_indexed)}` : ' - not scanned yet'}
                     </p>
                   </div>
-                  <button onClick={() => removeIndexedDir(d.path)} className="text-xs px-3 py-1 border border-border text-text-primary rounded-btn hover:bg-border transition-colors shrink-0 ml-2">Remove</button>
+                  <button onClick={() => removeIndexedDir(d.path)} className="rounded px-2 py-1 text-xs shrink-0 ml-2 transition-colors" style={dangerButton}>Remove</button>
                 </div>
               ))}
             </div>
           )}
-        <div className="flex gap-2">
-          <input
-            className={INPUT}
-            value={newIndexedDir}
-            onChange={e => setNewIndexedDir(e.target.value)}
-            placeholder="/absolute/path/to/dir"
-          />
-          <button onClick={addIndexedDir} disabled={rescanning} className="text-xs px-4 py-1.5 bg-accent text-bg rounded-btn hover:opacity-80 transition-opacity shrink-0 disabled:opacity-50">Add</button>
-        </div>
-      </section>
-
-      <section className="mb-8">
-        <h2 className={SECTION}>Preferences</h2>
-        <div className="flex flex-col gap-3">
-          <label className="flex items-center justify-between">
-            <span className="text-text-primary text-sm">Max results</span>
+          <div className="flex gap-2">
             <input
-              type="number"
-              min={10}
-              max={200}
-              className="bg-border border border-border text-text-primary rounded-btn px-3 py-1.5 text-sm w-24"
-              value={maxResults}
-              onChange={e => setMaxResults(e.target.value)}
-              onBlur={saveMaxResults}
+              className="flex-1 rounded px-2 py-1 text-xs"
+              style={inputStyle}
+              value={newIndexedDir}
+              onChange={e => setNewIndexedDir(e.target.value)}
+              placeholder="/absolute/path/to/dir"
             />
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={includeHidden}
-              onChange={e => toggleIncludeHidden(e.target.checked)}
-            />
-            <span className="text-text-primary text-sm">Include hidden files</span>
-          </label>
-        </div>
-      </section>
+            <button onClick={addIndexedDir} disabled={rescanning} className="rounded px-2 py-1 text-xs shrink-0 transition-colors disabled:opacity-50" style={accentButton}>Add</button>
+          </div>
+        </Section>
 
-      <section className="mb-8">
-        <h2 className={SECTION}>Transfer Queue</h2>
-        {queue.length === 0
-          ? <p className="text-text-muted text-xs">No transfers yet.</p>
-          : (
+        <Section title="Preferences">
+          <div className="flex flex-col gap-3 px-3 py-2 rounded" style={itemCard}>
+            <label className="flex items-center justify-between">
+              <span className="text-xs" style={{ color: 'var(--text)' }}>Max results</span>
+              <input
+                type="number"
+                min={10}
+                max={200}
+                className="rounded px-2 py-1 text-xs w-24"
+                style={inputStyle}
+                value={maxResults}
+                onChange={e => setMaxResults(e.target.value)}
+                onBlur={saveMaxResults}
+              />
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeHidden}
+                onChange={e => toggleIncludeHidden(e.target.checked)}
+                style={{ accentColor: 'var(--accent)' }}
+              />
+              <span className="text-xs" style={{ color: 'var(--text)' }}>Include hidden files</span>
+            </label>
+          </div>
+        </Section>
+
+        <Section title="Transfer Queue">
+          {queue.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>No transfers yet.</p>
+          ) : (
             <div className="flex flex-col gap-2">
               {queue.map(t => (
-                <div key={t.transfer_id} className="bg-surface border border-border rounded-card px-4 py-2">
+                <div key={t.transfer_id} className="px-3 py-2" style={itemCard}>
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-text-primary text-sm font-medium">{t.filename}</p>
-                      <p className="text-text-muted text-xs">{t.peer_name}</p>
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{t.filename}</p>
+                      <p className="text-xs" style={{ color: 'var(--muted)' }}>{t.peer_name}</p>
                     </div>
-                    <span className={statusBadgeClass(t.status)}>{statusLabel(t.status)}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={statusBadgeStyle(t.status)}>{statusLabel(t.status)}</span>
                   </div>
                   {t.status === 'InProgress' && (
-                    <div className="h-1 rounded bg-border mt-2">
+                    <div className="h-1 rounded mt-2" style={{ backgroundColor: 'var(--border)' }}>
                       <div
-                        className="h-1 rounded bg-accent"
-                        style={{ width: `${t.total > 0 ? (t.bytes_received / t.total) * 100 : 0}%` }}
+                        className="h-1 rounded"
+                        style={{ width: `${t.total > 0 ? (t.bytes_received / t.total) * 100 : 0}%`, backgroundColor: 'var(--accent)' }}
                       />
                     </div>
                   )}
                   {t.status === 'Complete' && (
-                    <p className="text-text-muted text-xs mt-1">{formatBytes(t.total)}</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{formatBytes(t.total)}</p>
                   )}
                   {isFailed(t.status) && (
-                    <p className="text-red-400 text-xs mt-1">{t.status.Failed.reason}</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--danger)' }}>{t.status.Failed.reason}</p>
                   )}
                 </div>
               ))}
             </div>
           )}
-      </section>
+        </Section>
 
-      <section className="mb-8">
-        <h2 className={SECTION}>Transfer History</h2>
-        {history.length === 0
-          ? <p className="text-text-muted text-xs">No transfers yet.</p>
-          : (
+        <Section title="Transfer History">
+          {history.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>No transfers yet.</p>
+          ) : (
             <div className="flex flex-col gap-2">
               {history.map((t, i) => (
-                <div key={`${t.filename}-${t.started_at}-${i}`} className="flex items-center justify-between bg-surface border border-border rounded-card px-4 py-2">
-                  <div>
-                    <p className="text-text-primary text-sm">{t.filename}</p>
-                    <p className="text-text-muted text-xs font-mono">{t.peer_device_id.slice(0, 12)}</p>
+                <div key={`${t.filename}-${t.started_at}-${i}`} className="flex items-center justify-between px-3 py-2" style={itemCard}>
+                  <div className="min-w-0">
+                    <p className="text-[13px]" style={{ color: 'var(--text)' }}>{t.filename}</p>
+                    <p className="text-xs" style={{ color: 'var(--muted)', fontFamily: 'monospace' }}>{t.peer_device_id.slice(0, 12)}</p>
                   </div>
-                  <div className="text-right">
-                    <span className="text-xs px-2 py-0.5 rounded text-accent bg-accent/10">{t.status}</span>
-                    <p className="text-text-muted text-xs mt-1">{relativeDate(t.started_at)}</p>
+                  <div className="text-right shrink-0 ml-2">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--surface-hover)', color: 'var(--accent)', border: '1px solid var(--accent)' }}>{t.status}</span>
+                    <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{relativeDate(t.started_at)}</p>
                   </div>
                 </div>
               ))}
             </div>
           )}
-      </section>
+        </Section>
+      </div>
     </div>
   );
 };
+
+interface SectionProps {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}
+
+function Section({ title, action, children }: SectionProps) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <h2 className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
+          {title}
+        </h2>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}

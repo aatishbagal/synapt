@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Search } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { InputMode, ParsedInput } from '../types';
 import { parseInput } from '../utils/parseInput';
@@ -61,9 +62,24 @@ export const SearchBar: React.FC<Props> = ({ onInput, onArrowDown, onEscape }) =
   const showBadge = parsed.mode !== 'local';
 
   return (
-    <div className="relative">
+    <div
+      className="flex items-center gap-2 px-3 shrink-0"
+      style={{
+        height: '48px',
+        backgroundColor: 'var(--surface)',
+        borderBottom: '1px solid var(--border)',
+      }}
+    >
+      <Search size={16} style={{ color: 'var(--muted)' }} className="shrink-0" />
       {showBadge && (
-        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs px-2 py-0.5 rounded bg-accent/10 text-accent">
+        <span
+          className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
+          style={{
+            backgroundColor: 'var(--surface-hover)',
+            color: 'var(--accent)',
+            border: '1px solid var(--accent)',
+          }}
+        >
           {MODE_LABELS[parsed.mode]}
         </span>
       )}
@@ -74,12 +90,13 @@ export const SearchBar: React.FC<Props> = ({ onInput, onArrowDown, onEscape }) =
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         placeholder="Search files, @device, /folder, or calculate..."
-        className={`w-full bg-surface border border-border rounded-card py-3 text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-accent placeholder:text-text-muted ${
-          showBadge ? 'pl-20 pr-4' : 'px-4'
-        }`}
+        className="flex-1 bg-transparent text-sm outline-none"
+        style={{ color: 'var(--text)' }}
       />
       {parsed.mode === 'calc' && calcResult !== null && (
-        <p className="text-accent text-sm mt-1 px-4">= {calcResult}</p>
+        <span className="text-sm shrink-0" style={{ color: 'var(--accent)' }}>
+          = {calcResult}
+        </span>
       )}
     </div>
   );

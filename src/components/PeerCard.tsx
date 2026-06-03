@@ -14,22 +14,78 @@ export const PeerCard: React.FC<Props> = ({ peer, onPair, onSendFile, selected, 
   return (
     <div
       onClick={trusted && onSelect ? () => onSelect(peer) : undefined}
-      className={`flex items-center justify-between px-4 py-3 bg-surface rounded-card border ${
-        selected ? 'border-accent ring-1 ring-accent' : 'border-border'
-      } ${trusted ? 'cursor-pointer' : ''}`}
+      className={`flex items-center justify-between gap-2 px-3 py-2.5 transition-colors ${
+        trusted ? 'cursor-pointer' : ''
+      }`}
+      style={{
+        borderBottom: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+        backgroundColor: selected ? 'var(--surface-hover)' : 'transparent',
+      }}
+      onMouseEnter={e => {
+        if (!selected) (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--surface-hover)';
+      }}
+      onMouseLeave={e => {
+        if (!selected) (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent';
+      }}
     >
-      <div>
-        <p className="text-text-primary text-sm font-medium">{peer.device_name}</p>
-        <p className="text-text-muted text-xs">{peer.ip}</p>
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+        <span className="truncate text-[13px]" style={{ color: 'var(--text)' }}>
+          {peer.device_name}
+        </span>
+        <span className="truncate text-xs" style={{ color: 'var(--muted)' }}>
+          {peer.ip}
+        </span>
       </div>
-      <div className="flex items-center gap-2">
-        <span className={`text-xs px-2 py-0.5 rounded ${
-          trusted ? 'text-accent bg-accent/10' : 'text-text-muted bg-border'
-        }`}>{trusted ? 'Trusted' : 'Discovered'}</span>
-        {trusted
-          ? <button onClick={(e) => { e.stopPropagation(); onSendFile(peer); }} className="text-xs px-3 py-1 bg-accent text-bg rounded-btn hover:opacity-80 transition-opacity">Send file</button>
-          : <button onClick={(e) => { e.stopPropagation(); onPair(peer); }}     className="text-xs px-3 py-1 border border-border text-text-primary rounded-btn hover:bg-border transition-colors">Pair</button>
-        }
+      <div className="flex items-center gap-2 shrink-0">
+        <span
+          className="text-[10px] px-1.5 py-0.5 rounded"
+          style={
+            trusted
+              ? {
+                  backgroundColor: 'var(--surface-hover)',
+                  color: 'var(--accent)',
+                  border: '1px solid var(--accent)',
+                }
+              : {
+                  backgroundColor: 'var(--surface-hover)',
+                  color: 'var(--muted)',
+                  border: '1px solid var(--border)',
+                }
+          }
+        >
+          {trusted ? 'Trusted' : 'Discovered'}
+        </span>
+        {trusted ? (
+          <button
+            onClick={e => {
+              e.stopPropagation();
+              onSendFile(peer);
+            }}
+            className="rounded px-2 py-1 text-xs transition-colors"
+            style={{
+              backgroundColor: 'var(--surface-hover)',
+              color: 'var(--accent)',
+              border: '1px solid var(--accent)',
+            }}
+          >
+            Send file
+          </button>
+        ) : (
+          <button
+            onClick={e => {
+              e.stopPropagation();
+              onPair(peer);
+            }}
+            className="rounded px-2 py-1 text-xs transition-colors"
+            style={{
+              backgroundColor: 'var(--surface)',
+              color: 'var(--text)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            Pair
+          </button>
+        )}
       </div>
     </div>
   );

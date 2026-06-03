@@ -22,6 +22,19 @@ const codeStyle: React.CSSProperties = {
   fontFamily: 'monospace',
   fontSize: '32px',
   letterSpacing: '0.2em',
+  color: 'var(--accent)',
+};
+
+const primaryButton: React.CSSProperties = {
+  backgroundColor: 'var(--surface-hover)',
+  color: 'var(--accent)',
+  border: '1px solid var(--accent)',
+};
+
+const secondaryButton: React.CSSProperties = {
+  backgroundColor: 'var(--surface)',
+  color: 'var(--text)',
+  border: '1px solid var(--border)',
 };
 
 function formatCode(code: string): string {
@@ -104,57 +117,75 @@ export const PairingDialog: React.FC<Props> = ({ mode, peer, incomingPair, onClo
     onClose();
   };
 
+  const btnClass = 'flex-1 text-xs px-3 py-2 rounded transition-colors';
+
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-surface border border-border rounded-card p-6 w-80">
+    <div
+      className="fixed inset-0 flex items-center justify-center z-50"
+      style={{ backgroundColor: 'rgba(0, 0, 0, 0.6)' }}
+    >
+      <div
+        className="p-6 w-80"
+        style={{
+          backgroundColor: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: '8px',
+        }}
+      >
         {step === 'connecting' && (
-          <p className="text-text-muted text-sm text-center">Connecting...</p>
+          <p className="text-sm text-center" style={{ color: 'var(--muted)' }}>
+            Connecting...
+          </p>
         )}
 
         {step === 'verify' && (
           <div className="flex flex-col gap-4">
-            <p className="text-text-primary text-center" style={codeStyle}>{formatCode(code)}</p>
-            <p className="text-text-muted text-xs text-center">
+            <p className="text-center" style={codeStyle}>{formatCode(code)}</p>
+            <p className="text-xs text-center" style={{ color: 'var(--muted)' }}>
               Compare this code on the other device. If they match, click Confirm.
             </p>
             <div className="flex gap-2">
-              <button onClick={onConfirm} className="flex-1 text-xs px-3 py-2 bg-accent text-bg rounded-btn hover:opacity-80 transition-opacity">Confirm</button>
-              <button onClick={onClose} className="flex-1 text-xs px-3 py-2 border border-border text-text-primary rounded-btn hover:bg-border transition-colors">Cancel</button>
+              <button onClick={onConfirm} className={btnClass} style={primaryButton}>Confirm</button>
+              <button onClick={onClose} className={btnClass} style={secondaryButton}>Cancel</button>
             </div>
           </div>
         )}
 
         {step === 'prompt' && incomingPair && (
           <div className="flex flex-col gap-4">
-            <p className="text-text-primary text-sm text-center">{incomingPair.device_name} wants to pair.</p>
-            <p className="text-text-primary text-center" style={codeStyle}>{formatCode(code)}</p>
-            <p className="text-text-muted text-xs text-center">
+            <p className="text-sm text-center" style={{ color: 'var(--text)' }}>
+              {incomingPair.device_name} wants to pair.
+            </p>
+            <p className="text-center" style={codeStyle}>{formatCode(code)}</p>
+            <p className="text-xs text-center" style={{ color: 'var(--muted)' }}>
               If this code matches the one on the other device, click Accept.
             </p>
             <div className="flex gap-2">
-              <button onClick={onAccept} className="flex-1 text-xs px-3 py-2 bg-accent text-bg rounded-btn hover:opacity-80 transition-opacity">Accept</button>
-              <button onClick={onReject} className="flex-1 text-xs px-3 py-2 border border-border text-text-primary rounded-btn hover:bg-border transition-colors">Reject</button>
+              <button onClick={onAccept} className={btnClass} style={primaryButton}>Accept</button>
+              <button onClick={onReject} className={btnClass} style={secondaryButton}>Reject</button>
             </div>
           </div>
         )}
 
         {step === 'waiting' && (
-          <p className="text-text-muted text-sm text-center">Completing pairing...</p>
+          <p className="text-sm text-center" style={{ color: 'var(--muted)' }}>
+            Completing pairing...
+          </p>
         )}
 
         {step === 'success' && (
           <div className="flex flex-col gap-4">
-            <p className="text-text-primary text-sm text-center">Device paired.</p>
-            <p className="text-text-muted text-xs text-center">{pairedName}</p>
-            <button onClick={onClose} className="text-xs px-3 py-2 bg-accent text-bg rounded-btn hover:opacity-80 transition-opacity">Done</button>
+            <p className="text-sm text-center" style={{ color: 'var(--text)' }}>Device paired.</p>
+            <p className="text-xs text-center" style={{ color: 'var(--muted)' }}>{pairedName}</p>
+            <button onClick={onClose} className="text-xs px-3 py-2 rounded transition-colors" style={primaryButton}>Done</button>
           </div>
         )}
 
         {step === 'error' && (
           <div className="flex flex-col gap-4">
-            <p className="text-text-primary text-sm text-center">Pairing failed.</p>
-            <p className="text-text-muted text-xs text-center break-words">{errorMsg}</p>
-            <button onClick={onClose} className="text-xs px-3 py-2 border border-border text-text-primary rounded-btn hover:bg-border transition-colors">Close</button>
+            <p className="text-sm text-center" style={{ color: 'var(--text)' }}>Pairing failed.</p>
+            <p className="text-xs text-center break-words" style={{ color: 'var(--muted)' }}>{errorMsg}</p>
+            <button onClick={onClose} className="text-xs px-3 py-2 rounded transition-colors" style={secondaryButton}>Close</button>
           </div>
         )}
       </div>
