@@ -117,7 +117,12 @@ export const Overlay: React.FC = () => {
   }, [parsedInput, nav]);
 
   const openSelected = (result: SearchResult) => {
-    invoke('open_file_path', { path: result.path }).catch(() => {});
+    if (result.result_type === 'App') {
+      invoke('launch_app', { exec: result.exec }).catch(() => {});
+    } else {
+      invoke('open_file_path', { path: result.path }).catch(() => {});
+    }
+    invoke('hide_window').catch(() => {});
   };
 
   const sendPaths = (paths: string[]) => {

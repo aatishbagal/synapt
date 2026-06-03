@@ -473,6 +473,39 @@ pub async fn open_file_path(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Launch an installed application by its platform-specific exec string/path.
+#[tauri::command]
+pub async fn launch_app(exec: String) -> Result<(), String> {
+    use std::process::Command;
+    #[cfg(target_os = "linux")]
+    {
+        // `exec` has already had its .desktop field codes stripped at index time.
+        let mut parts = exec.split_whitespace();
+        let program = parts.next().ok_or_else(|| "empty exec".to_string())?;
+        let args: Vec<&str> = parts.collect();
+        Command::new(program).args(args).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // Use the shell to resolve .lnk shortcuts and launch executables alike.
+        Command::new("cmd")
+            .args(["/c", "start", "", &exec])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").arg(&exec).spawn().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Scan installed applications and repopulate the applications index.
+#[tauri::command]
+pub async fn trigger_app_scan(state: tauri::State<'_, crate::AppState>) -> Result<usize, String> {
+    crate::search::app_indexer::run_app_scan(&state.db).await.map_err(|e| e.to_string())
+}
+
 /// Hide the main overlay window.
 #[tauri::command]
 pub async fn hide_window(app: tauri::AppHandle) -> Result<(), String> {
@@ -511,7 +544,7 @@ pub async fn search_remote(
     state: tauri::State<'_, crate::AppState>,
 ) -> Result<Vec<crate::search::engine::SearchResult>, String> {
     use crate::network::search_server::SearchMsg;
-    use crate::search::engine::{ResultSource, SearchResult};
+    use crate::search::engine::{ResultSource, ResultType, SearchResult};
 
     let peers = crate::trust::list_trusted_peers(&state.db).await.map_err(|e| e.to_string())?;
     let (device_name, peer_pubkey) = peers
@@ -563,6 +596,8 @@ pub async fn search_remote(
         .map(|r| SearchResult {
             name: r.name,
             path: r.path,
+            exec: None,
+            result_type: ResultType::File,
             source: ResultSource::Remote { device_name: device_name.clone() },
             score: r.score,
         })

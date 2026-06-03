@@ -61,6 +61,17 @@ pub struct FileRow {
     pub is_hidden:     i64,
 }
 
+/// A row in the applications table (a discovered installed application).
+#[derive(Debug, sqlx::FromRow, Clone, serde::Serialize)]
+pub struct AppRow {
+    pub id:          i64,
+    pub name:        String,
+    pub exec:        String,
+    pub icon_path:   Option<String>,
+    pub platform:    String,
+    pub source_path: String,
+}
+
 /// A row in the indexed_dirs table.
 #[derive(Debug, sqlx::FromRow, Clone, serde::Serialize)]
 pub struct IndexedDirRow {
@@ -422,6 +433,52 @@ impl Db {
         .fetch_all(&self.pool)
         .await?;
         Ok(rows)
+    }
+
+    /// Insert or replace a discovered application, keyed on its unique source path.
+    pub async fn upsert_app(&self, row: &AppRow) -> Result<(), DbError> {
+        sqlx::query(
+            "INSERT OR REPLACE INTO applications \
+               (name, exec, icon_path, platform, source_path) \
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(&row.name)
+        .bind(&row.exec)
+        .bind(&row.icon_path)
+        .bind(&row.platform)
+        .bind(&row.source_path)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Return every indexed application ordered by name.
+    pub async fn get_all_apps(&self) -> Result<Vec<AppRow>, DbError> {
+        let rows = sqlx::query_as::<_, AppRow>(
+            "SELECT id, name, exec, icon_path, platform, source_path \
+             FROM applications ORDER BY name ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Substring search over indexed application names, capped at 20 results.
+    pub async fn search_apps_by_name(&self, query: &str) -> Result<Vec<AppRow>, DbError> {
+        let rows = sqlx::query_as::<_, AppRow>(
+            "SELECT id, name, exec, icon_path, platform, source_path \
+             FROM applications WHERE name LIKE ? ORDER BY name ASC LIMIT 20",
+        )
+        .bind(format!("%{}%", query))
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Remove all indexed applications (called before a fresh app scan).
+    pub async fn clear_apps(&self) -> Result<(), DbError> {
+        sqlx::query("DELETE FROM applications").execute(&self.pool).await?;
+        Ok(())
     }
 
     /// Open an in-memory database with migrations applied, for tests only.

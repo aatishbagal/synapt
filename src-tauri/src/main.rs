@@ -167,6 +167,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             });
 
+            // Installed-application scan, independent of the file index.
+            let db_for_apps = Arc::clone(&db);
+            tokio::spawn(async move {
+                if let Err(e) = search::app_indexer::run_app_scan(&db_for_apps).await {
+                    tracing::warn!("app scan failed: {}", e);
+                }
+            });
+
             // Initial file system scan and full-text index build.
             let db4 = Arc::clone(&db);
             let fi = Arc::clone(&file_index);
@@ -242,6 +250,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::search_remote,
             commands::evaluate_expr,
             commands::open_file_path,
+            commands::launch_app,
+            commands::trigger_app_scan,
             commands::hide_window,
         ])
         .run(tauri::generate_context!())?;

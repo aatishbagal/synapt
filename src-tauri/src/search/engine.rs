@@ -19,14 +19,29 @@ const MIN_RESULTS_BEFORE_FUZZY: usize = 3;
 pub struct SearchResult {
     pub name:   String,
     pub path:   String,
+    /// Command or path used to launch the result (applications only).
+    #[serde(default)]
+    pub exec:   Option<String>,
+    /// Whether this hit is a file or an installed application.
+    #[serde(default)]
+    pub result_type: ResultType,
     pub source: ResultSource,
     pub score:  f64,
+}
+
+/// Whether a result is a file or an installed application.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub enum ResultType {
+    #[default]
+    File,
+    App,
 }
 
 /// Where a result came from.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ResultSource {
-    Local,
+    LocalFile,
+    LocalApp,
     Remote { device_name: String },
 }
 
@@ -64,6 +79,18 @@ fn file_name_of(path: &str) -> String {
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| path.to_string())
+}
+
+/// Build a local file [`SearchResult`] for a path at the given score.
+fn file_result(path: String, score: f64) -> SearchResult {
+    SearchResult {
+        name: file_name_of(&path),
+        exec: None,
+        result_type: ResultType::File,
+        source: ResultSource::LocalFile,
+        score,
+        path,
+    }
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -118,12 +145,7 @@ impl SearchEngine {
                 .index
                 .search_wildcard(&stripped, max_results)?
                 .into_iter()
-                .map(|path| SearchResult {
-                    name: file_name_of(&path),
-                    path,
-                    source: ResultSource::Local,
-                    score: 0.65,
-                })
+                .map(|path| file_result(path, 0.65))
                 .collect();
             return Ok(results);
         }
@@ -145,12 +167,7 @@ impl SearchEngine {
         // 1. Trie prefix search.
         for path in lock(&self.trie).prefix_search(&q, max_results) {
             if seen.insert(path.clone()) {
-                results.push(SearchResult {
-                    name: file_name_of(&path),
-                    path,
-                    source: ResultSource::Local,
-                    score: 1.0,
-                });
+                results.push(file_result(path, 1.0));
             }
         }
 
@@ -158,12 +175,7 @@ impl SearchEngine {
         if results.len() < max_results {
             for path in self.index.search(&q, max_results)? {
                 if seen.insert(path.clone()) {
-                    results.push(SearchResult {
-                        name: file_name_of(&path),
-                        path,
-                        source: ResultSource::Local,
-                        score: 0.8,
-                    });
+                    results.push(file_result(path, 0.8));
                 }
             }
         }
@@ -174,17 +186,29 @@ impl SearchEngine {
         if results.len() < MIN_RESULTS_BEFORE_FUZZY {
             for path in self.index.search_wildcard(&q, max_results)? {
                 if seen.insert(path.clone()) {
-                    results.push(SearchResult {
-                        name: file_name_of(&path),
-                        path,
-                        source: ResultSource::Local,
-                        score: 0.65,
-                    });
+                    results.push(file_result(path, 0.65));
                 }
             }
         }
 
-        // 4. Fuzzy fallback.
+        // 4. Application search — apps are surfaced above files. Always run so a
+        // matching app appears regardless of how many files matched.
+        let app_results = self.db.search_apps_by_name(&q).await.unwrap_or_default();
+        for app in app_results {
+            let key = format!("app:{}", app.source_path);
+            if seen.insert(key) {
+                results.push(SearchResult {
+                    name: app.name,
+                    path: app.source_path,
+                    exec: Some(app.exec),
+                    result_type: ResultType::App,
+                    source: ResultSource::LocalApp,
+                    score: 1.0,
+                });
+            }
+        }
+
+        // 5. Fuzzy fallback.
         if results.len() < MIN_RESULTS_BEFORE_FUZZY {
             let candidates = self.db.search_files_by_name(&q, 500).await?;
             for m in fuzzy::match_candidates(&q, &candidates, JW_THRESHOLD, LEV_MAX_DIST, max_results)
@@ -193,12 +217,21 @@ impl SearchEngine {
                     results.push(SearchResult {
                         name: m.name,
                         path: m.path,
-                        source: ResultSource::Local,
+                        exec: None,
+                        result_type: ResultType::File,
+                        source: ResultSource::LocalFile,
                         score: m.score * 0.6,
                     });
                 }
             }
         }
+
+        // Apps sort above files; within a type, higher score first.
+        results.sort_by(|a, b| match (&a.result_type, &b.result_type) {
+            (ResultType::App, ResultType::File) => std::cmp::Ordering::Less,
+            (ResultType::File, ResultType::App) => std::cmp::Ordering::Greater,
+            _ => b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal),
+        });
 
         results.truncate(max_results);
         lock(&self.cache).put(q, results.clone());
@@ -301,6 +334,31 @@ mod tests {
         let engine = engine_with_files(&["report_final.pdf"]).await;
         let results = engine.search("report", 50).await.unwrap();
         assert!(results.iter().any(|r| r.name == "report_final.pdf"));
+    }
+
+    #[tokio::test]
+    async fn app_results_sort_above_file_results() {
+        use crate::storage::AppRow;
+        // A file and an app both match 'code'; the app must come first.
+        let engine = engine_with_files(&["code_notes.txt"]).await;
+        engine
+            .db
+            .upsert_app(&AppRow {
+                id: 0,
+                name: "VS Code".to_string(),
+                exec: "code".to_string(),
+                icon_path: None,
+                platform: "linux".to_string(),
+                source_path: "/usr/share/applications/code.desktop".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let results = engine.search("code", 50).await.unwrap();
+        assert!(results.len() >= 2, "expected app and file, got {results:?}");
+        assert!(matches!(results[0].result_type, ResultType::App));
+        assert_eq!(results[0].name, "VS Code");
+        assert!(results.iter().any(|r| r.name == "code_notes.txt"));
     }
 
     #[tokio::test]

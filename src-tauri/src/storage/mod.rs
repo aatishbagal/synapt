@@ -1,4 +1,5 @@
 pub mod db;
 pub use db::{
-    Db, DbError, FileRow, IndexedDirRow, LocalDeviceRow, TransferHistoryRow, TrustedPeerRow,
+    AppRow, Db, DbError, FileRow, IndexedDirRow, LocalDeviceRow, TransferHistoryRow,
+    TrustedPeerRow,
 };
