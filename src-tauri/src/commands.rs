@@ -274,13 +274,20 @@ pub async fn get_ipc_status() -> Result<bool, String> {
 
 /// Show a native folder picker. Returns the chosen path, or None if cancelled.
 #[tauri::command]
-pub async fn open_dir_picker(app: tauri::AppHandle) -> Result<Option<String>, String> {
+pub async fn open_dir_picker(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
+    // Keep the overlay from auto-hiding while the picker (which steals focus) is open.
+    state.suppress_hide.store(true, std::sync::atomic::Ordering::Relaxed);
     let (tx, rx) = tokio::sync::oneshot::channel();
     app.dialog().file().pick_folder(move |picked| {
         let _ = tx.send(picked);
     });
-    let picked = rx.await.map_err(|e| e.to_string())?;
+    let result = rx.await.map_err(|e| e.to_string());
+    state.suppress_hide.store(false, std::sync::atomic::Ordering::Relaxed);
+    let picked = result?;
     Ok(picked.and_then(|p| p.into_path().ok()).map(|p| p.to_string_lossy().to_string()))
 }
 

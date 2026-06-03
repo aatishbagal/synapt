@@ -37,6 +37,9 @@ pub struct AppState {
     pub discovery_name: Arc<std::sync::Mutex<String>>,
     /// Set to force the discovery thread to emit a presence packet immediately.
     pub rebroadcast:  Arc<AtomicBool>,
+    /// When true, the overlay does not auto-hide on focus loss (e.g. while a
+    /// native folder picker, which steals focus, is open).
+    pub suppress_hide: Arc<AtomicBool>,
     /// Channel sender for accepting/rejecting incoming pair requests.
     pub pair_tx:      Arc<Mutex<Option<tokio::sync::oneshot::Sender<bool>>>>,
     /// Pending outbound pairing (initiator side, waiting for user confirmation).
@@ -104,6 +107,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // commands layer holds a separate lockable copy whose device name can change.
     let identity_lock = Arc::new(RwLock::new((*identity).clone()));
 
+    let suppress_hide = Arc::new(AtomicBool::new(false));
+
     let state = AppState {
         db:            Arc::clone(&db),
         identity:      Arc::clone(&identity_lock),
@@ -111,6 +116,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         trusted_ids:   Arc::clone(&trusted_ids),
         discovery_name: Arc::clone(&discovery_name),
         rebroadcast:   Arc::clone(&rebroadcast),
+        suppress_hide: Arc::clone(&suppress_hide),
         pair_tx:       Arc::clone(&pair_tx),
         pending_pair:  Arc::clone(&pending_pair),
         file_index:    Arc::clone(&file_index),
@@ -137,6 +143,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Shared system tray: become the host (owns the single icon) or attach
             // as a client to an already-running Synapt/SynaptClip host.
             share::start(app);
+
+            // Dismiss the overlay when it loses focus (click-away to hide), matching
+            // SynaptClip. Suppressed while a native folder picker is open, since that
+            // dialog steals focus and would otherwise hide the Settings page under it.
+            if let Some(window) = app.get_webview_window("main") {
+                let w = window.clone();
+                let suppress = Arc::clone(&suppress_hide);
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::Focused(false) = event {
+                        if !suppress.load(std::sync::atomic::Ordering::Relaxed) {
+                            let _ = w.hide();
+                        }
+                    }
+                });
+            }
 
             // Global hotkey to toggle the overlay.
             // Linux X11 uses XGrabKey; Wayland uses the inhibitor protocol and may
