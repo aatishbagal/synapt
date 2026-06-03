@@ -1,0 +1,48 @@
+[package]
+name = "synapt"
+version = "0.3.1"
+description = "Spotlight-style launcher and encrypted LAN file utility"
+authors = ["Aatish Bagal <dev@aatish.io>"]
+license = "Apache-2.0"
+repository = "https://github.com/aatishbagal/synapt"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "synapt_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+synapt-core = { path = "../../synapt-core" }
+tokio = { version = "1", features = ["full"] }
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "migrate"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dirs = "5"
+uuid = { version = "1", features = ["v4", "serde"] }
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+chacha20poly1305 = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+rand = { version = "0.8", features = ["getrandom"] }
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+hostname = "0.3"
+local-ip-address = "0.6"
+tantivy = "0.22"
+lru = "0.12"
+tauri-plugin-global-shortcut = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

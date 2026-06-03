@@ -1,0 +1,570 @@
+use std::sync::MutexGuard;
+
+/// Lock a std mutex, recovering the guard if a holder thread panicked.
+fn lock<T>(m: &std::sync::Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Local device identity exposed to the UI (no private key material).
+#[derive(serde::Serialize)]
+pub struct LocalDeviceInfo {
+    pub device_id: String,
+    pub device_name: String,
+    pub pubkey_b64: String,
+    pub fingerprint: String,
+}
+
+/// Get the local device identity and key fingerprint.
+#[tauri::command]
+pub async fn get_local_device(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<LocalDeviceInfo, String> {
+    let fingerprint =
+        crate::trust::fingerprint(&state.identity.pubkey_b64).map_err(|e| e.to_string())?;
+    Ok(LocalDeviceInfo {
+        device_id: state.identity.device_id.to_string(),
+        device_name: state.identity.device_name.clone(),
+        pubkey_b64: state.identity.pubkey_b64.clone(),
+        fingerprint,
+    })
+}
+
+/// List peers currently visible on the LAN.
+#[tauri::command]
+pub async fn get_peers(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<synapt_core::Peer>, String> {
+    Ok(crate::network::list_peers(&state.peer_map))
+}
+
+/// List all paired (trusted) peers.
+#[tauri::command]
+pub async fn get_trusted_peers(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<synapt_core::TrustedPeer>, String> {
+    crate::trust::list_trusted_peers(&state.db).await.map_err(|e| e.to_string())
+}
+
+/// Begin pairing with a discovered peer; returns the verification code to display.
+#[tauri::command]
+pub async fn begin_pairing_cmd(
+    device_id: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<String, String> {
+    let (ip, port) = {
+        let map = lock(&state.peer_map);
+        let entry = map.get(&device_id).ok_or_else(|| "peer not found".to_string())?;
+        (entry.peer.ip, entry.peer.pairing_port)
+    };
+    let pending = crate::network::peer::begin_pairing(ip, port, &state.identity)
+        .await
+        .map_err(|e| e.to_string())?;
+    let code = pending.verify_code.clone();
+    *state.pending_pair.lock().await = Some(pending);
+    Ok(code)
+}
+
+/// Confirm a pending outbound pairing after the user verified the code.
+#[tauri::command]
+pub async fn confirm_pairing_cmd(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<synapt_core::TrustedPeer, String> {
+    let pending = state
+        .pending_pair
+        .lock()
+        .await
+        .take()
+        .ok_or_else(|| "no pending pairing".to_string())?;
+    let peer = crate::network::peer::confirm_pairing(pending, &state.identity, &state.db)
+        .await
+        .map_err(|e| e.to_string())?;
+    lock(&state.trusted_ids).insert(peer.device_id.to_string());
+    Ok(peer)
+}
+
+/// Accept an incoming pair request awaiting a decision.
+#[tauri::command]
+pub async fn accept_pair_cmd(state: tauri::State<'_, crate::AppState>) -> Result<(), String> {
+    let tx = state
+        .pair_tx
+        .lock()
+        .await
+        .take()
+        .ok_or_else(|| "no pending pair request".to_string())?;
+    tx.send(true).map_err(|_| "failed to deliver decision".to_string())
+}
+
+/// Reject an incoming pair request awaiting a decision.
+#[tauri::command]
+pub async fn reject_pair_cmd(state: tauri::State<'_, crate::AppState>) -> Result<(), String> {
+    let tx = state
+        .pair_tx
+        .lock()
+        .await
+        .take()
+        .ok_or_else(|| "no pending pair request".to_string())?;
+    tx.send(false).map_err(|_| "failed to deliver decision".to_string())
+}
+
+/// Revoke a trusted peer by device id.
+#[tauri::command]
+pub async fn revoke_peer_cmd(
+    device_id: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<(), String> {
+    crate::trust::revoke_peer(&state.db, &device_id).await.map_err(|e| e.to_string())?;
+    lock(&state.trusted_ids).remove(&device_id);
+    Ok(())
+}
+
+/// Get the configured shared directories.
+#[tauri::command]
+pub async fn get_shared_dirs(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<String>, String> {
+    state.db.get_shared_dirs().await.map_err(|e| e.to_string())
+}
+
+/// Add a shared directory after validating it exists.
+#[tauri::command]
+pub async fn add_shared_dir(
+    path: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<(), String> {
+    if !std::path::Path::new(&path).is_dir() {
+        return Err("path is not a directory".to_string());
+    }
+    state.db.add_shared_dir(&path).await.map_err(|e| e.to_string())
+}
+
+/// Remove a shared directory.
+#[tauri::command]
+pub async fn remove_shared_dir(
+    path: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<(), String> {
+    state.db.remove_shared_dir(&path).await.map_err(|e| e.to_string())
+}
+
+/// Get a setting value by key.
+#[tauri::command]
+pub async fn get_setting(
+    key: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Option<String>, String> {
+    state.db.get_setting(&key).await.map_err(|e| e.to_string())
+}
+
+/// Set a setting value.
+#[tauri::command]
+pub async fn set_setting(
+    key: String,
+    value: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<(), String> {
+    state.db.set_setting(&key, &value).await.map_err(|e| e.to_string())
+}
+
+/// Request a single file from a trusted peer; returns the local download path.
+#[tauri::command]
+pub async fn request_file_cmd(
+    device_id: String,
+    remote_path: String,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<String, String> {
+    let peers = crate::trust::list_trusted_peers(&state.db).await.map_err(|e| e.to_string())?;
+    let peer = peers
+        .iter()
+        .find(|p| p.device_id.to_string() == device_id)
+        .ok_or_else(|| "peer not trusted".to_string())?;
+    let peer_name = peer.device_name.clone();
+
+    let download_dir = match state.db.get_setting("download_dir").await.map_err(|e| e.to_string())? {
+        Some(d) if !d.is_empty() => std::path::PathBuf::from(d),
+        _ => dirs::download_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("Synapt"),
+    };
+
+    let ip = {
+        let map = lock(&state.peer_map);
+        map.get(&device_id)
+            .map(|e| e.peer.ip)
+            .ok_or_else(|| "peer not online".to_string())?
+    };
+
+    let path = crate::network::transfer::request_transfer_with_retry(
+        &device_id,
+        ip,
+        remote_path,
+        &state.identity,
+        &state.db,
+        &download_dir,
+        &peer_name,
+        &app,
+        &state.transfer_queue,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Request multiple files from a trusted peer; returns the local download paths.
+#[tauri::command]
+pub async fn request_files_cmd(
+    device_id: String,
+    remote_paths: Vec<String>,
+    state: tauri::State<'_, crate::AppState>,
+    app: tauri::AppHandle,
+) -> Result<Vec<String>, String> {
+    let peers = crate::trust::list_trusted_peers(&state.db).await.map_err(|e| e.to_string())?;
+    let peer = peers
+        .iter()
+        .find(|p| p.device_id.to_string() == device_id)
+        .ok_or_else(|| "peer not trusted".to_string())?;
+    let peer_name = peer.device_name.clone();
+
+    let download_dir = match state.db.get_setting("download_dir").await.map_err(|e| e.to_string())? {
+        Some(d) if !d.is_empty() => std::path::PathBuf::from(d),
+        _ => dirs::download_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("Synapt"),
+    };
+
+    let ip = {
+        let map = lock(&state.peer_map);
+        map.get(&device_id)
+            .map(|e| e.peer.ip)
+            .ok_or_else(|| "peer not online".to_string())?
+    };
+
+    let paths = crate::network::transfer::request_batch_transfer_with_retry(
+        &device_id,
+        ip,
+        remote_paths,
+        &state.identity,
+        &state.db,
+        &download_dir,
+        &peer_name,
+        &app,
+        &state.transfer_queue,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(paths.into_iter().map(|p| p.to_string_lossy().to_string()).collect())
+}
+
+/// Return the in-memory transfer queue, most recent first.
+#[tauri::command]
+pub async fn get_transfer_queue(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<crate::network::QueueEntry>, String> {
+    Ok(state.transfer_queue.list())
+}
+
+/// Re-register the global hotkey and persist it to settings.
+#[tauri::command]
+pub async fn set_hotkey(
+    hotkey: String,
+    state: tauri::State<'_, crate::AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    use tauri::Manager;
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+    app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
+    app.global_shortcut()
+        .on_shortcut(hotkey.as_str(), |app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                if let Some(window) = app.get_webview_window("main") {
+                    if window.is_visible().unwrap_or(false) {
+                        let _ = window.hide();
+                    } else {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    state.db.set_setting("hotkey", &hotkey).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Send (push) one or more local files to a trusted peer.
+#[tauri::command]
+pub async fn send_files_cmd(
+    device_id: String,
+    local_paths: Vec<String>,
+    state: tauri::State<'_, crate::AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    for path in &local_paths {
+        let meta = std::fs::metadata(path).map_err(|e| format!("{path}: {e}"))?;
+        if !meta.is_file() {
+            return Err(format!("{path} is not a file"));
+        }
+    }
+
+    let peers = crate::trust::list_trusted_peers(&state.db).await.map_err(|e| e.to_string())?;
+    let peer = peers
+        .iter()
+        .find(|p| p.device_id.to_string() == device_id)
+        .ok_or_else(|| "peer not trusted".to_string())?;
+    let peer_name = peer.device_name.clone();
+
+    let ip = {
+        let map = lock(&state.peer_map);
+        map.get(&device_id)
+            .map(|e| e.peer.ip)
+            .ok_or_else(|| "peer not online".to_string())?
+    };
+
+    crate::network::transfer::push_files(
+        &device_id,
+        ip,
+        local_paths,
+        &state.identity,
+        &state.db,
+        &peer_name,
+        &app,
+        &state.transfer_queue,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// Get the transfer history, most recent first.
+#[tauri::command]
+pub async fn get_transfer_history(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<crate::storage::TransferHistoryRow>, String> {
+    state.db.get_transfer_history().await.map_err(|e| e.to_string())
+}
+
+/// Rescan the indexed directories, prune deleted files, and rebuild the index.
+#[tauri::command]
+pub async fn trigger_reindex(state: tauri::State<'_, crate::AppState>) -> Result<u64, String> {
+    let include_hidden = state
+        .db
+        .get_setting("include_hidden")
+        .await
+        .map_err(|e| e.to_string())?
+        .map(|v| v == "true")
+        .unwrap_or(false);
+    let total = crate::search::indexer::run_full_scan(&state.db, include_hidden)
+        .await
+        .map_err(|e| e.to_string())?;
+    crate::search::indexer::prune_deleted(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
+    state
+        .file_index
+        .rebuild_from_db(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
+    tracing::info!("tantivy: index rebuilt after reindex");
+    state.search_engine.rebuild().await.map_err(|e| e.to_string())?;
+    state
+        .index_ready
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(total)
+}
+
+/// List the directories currently configured for the search index.
+#[tauri::command]
+pub async fn get_indexed_dirs(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<crate::storage::IndexedDirRow>, String> {
+    state.db.get_indexed_dirs().await.map_err(|e| e.to_string())
+}
+
+/// Add a directory to the search index and rescan it in the background.
+#[tauri::command]
+pub async fn add_indexed_dir(
+    path: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.is_dir() {
+        return Err(format!("not a directory: {}", path));
+    }
+    state.db.add_indexed_dir(&path).await.map_err(|e| e.to_string())?;
+    // Rescan in the foreground so the caller can refresh results immediately.
+    let include_hidden = state
+        .db
+        .get_setting("include_hidden")
+        .await
+        .map_err(|e| e.to_string())?
+        .map(|v| v == "true")
+        .unwrap_or(false);
+    crate::search::indexer::run_full_scan(&state.db, include_hidden)
+        .await
+        .map_err(|e| e.to_string())?;
+    state
+        .file_index
+        .rebuild_from_db(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
+    state.search_engine.rebuild().await.map_err(|e| e.to_string())?;
+    state
+        .index_ready
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
+
+/// Remove a directory from the search index. Indexed files are pruned on next scan.
+#[tauri::command]
+pub async fn remove_indexed_dir(
+    path: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<(), String> {
+    state.db.remove_indexed_dir(&path).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Current state of the file index, for surfacing in Settings and the overlay.
+#[derive(serde::Serialize)]
+pub struct IndexStatus {
+    pub indexed_dirs_count: usize,
+    pub file_count: i64,
+    pub tantivy_ready: bool,
+    pub last_scan: Option<i64>,
+}
+
+/// Report the current file index status.
+#[tauri::command]
+pub async fn get_index_status(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<IndexStatus, String> {
+    let dirs = state.db.get_indexed_dirs().await.map_err(|e| e.to_string())?;
+    let file_count = state.db.count_files().await.map_err(|e| e.to_string())?;
+    let last_scan = state.db.get_last_scan().await.map_err(|e| e.to_string())?;
+    Ok(IndexStatus {
+        indexed_dirs_count: dirs.len(),
+        file_count,
+        tantivy_ready: state.index_ready.load(std::sync::atomic::Ordering::Relaxed),
+        last_scan,
+    })
+}
+
+/// Evaluate an inline arithmetic expression.
+#[tauri::command]
+pub fn evaluate_expr(input: String) -> Result<f64, String> {
+    crate::search::calc::evaluate(&input).map_err(|e| e.to_string())
+}
+
+/// Open a file or folder path with the platform's default handler.
+#[tauri::command]
+pub async fn open_file_path(path: String) -> Result<(), String> {
+    use std::process::Command;
+    #[cfg(target_os = "linux")]
+    Command::new("xdg-open").arg(&path).spawn().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "windows")]
+    Command::new("explorer").arg(&path).spawn().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    Command::new("open").arg(&path).spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Hide the main overlay window.
+#[tauri::command]
+pub async fn hide_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    app.get_webview_window("main")
+        .ok_or_else(|| "no window".to_string())?
+        .hide()
+        .map_err(|e| e.to_string())
+}
+
+/// Run a local search and return ranked results.
+#[tauri::command]
+pub async fn search_local(
+    query: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<crate::search::engine::SearchResult>, String> {
+    let max_results = state
+        .db
+        .get_setting("max_results")
+        .await
+        .map_err(|e| e.to_string())?
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(50);
+    state
+        .search_engine
+        .search(&query, max_results)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Search a trusted peer's shared files over the encrypted session channel.
+#[tauri::command]
+pub async fn search_remote(
+    device_id: String,
+    query: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<crate::search::engine::SearchResult>, String> {
+    use crate::network::search_server::SearchMsg;
+    use crate::search::engine::{ResultSource, SearchResult};
+
+    let peers = crate::trust::list_trusted_peers(&state.db).await.map_err(|e| e.to_string())?;
+    let (device_name, peer_pubkey) = peers
+        .iter()
+        .find(|p| p.device_id.to_string() == device_id)
+        .map(|p| (p.device_name.clone(), p.pubkey_b64.clone()))
+        .ok_or_else(|| "peer not trusted".to_string())?;
+
+    let ip = {
+        let map = lock(&state.peer_map);
+        map.get(&device_id)
+            .map(|e| e.peer.ip)
+            .ok_or_else(|| "peer not online".to_string())?
+    };
+
+    let max_results = state
+        .db
+        .get_setting("max_results")
+        .await
+        .map_err(|e| e.to_string())?
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(50);
+
+    let mut stream = tokio::net::TcpStream::connect((ip, crate::network::SEARCH_PORT))
+        .await
+        .map_err(|e| e.to_string())?;
+    let local_id = state.identity.device_id.to_string();
+    let key = crate::network::session_handshake_client(&mut stream, &local_id, &state.identity, &peer_pubkey)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let request = SearchMsg::SearchRequest { query, max_results };
+    crate::network::write_enc(&mut stream, &key, &serde_json::to_vec(&request).map_err(|e| e.to_string())?)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let response: SearchMsg = serde_json::from_slice(
+        &crate::network::read_enc(&mut stream, &key).await.map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+
+    let results = match response {
+        SearchMsg::SearchResults { results } => results,
+        _ => return Err("unexpected response from peer".to_string()),
+    };
+
+    Ok(results
+        .into_iter()
+        .map(|r| SearchResult {
+            name: r.name,
+            path: r.path,
+            source: ResultSource::Remote { device_name: device_name.clone() },
+            score: r.score,
+        })
+        .collect())
+}

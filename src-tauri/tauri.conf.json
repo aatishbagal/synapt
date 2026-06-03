@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Synapt",
+  "version": "0.3.1",
+  "identifier": "io.aatish.synapt",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Synapt",
+        "width": 680,
+        "height": 480,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "center": true,
+        "visible": false,
+        "skipTaskbar": true
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": false
+    },
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "publisher": "Aatish Bagal",
+    "copyright": "Copyright © 2026 Aatish Bagal",
+    "category": "Productivity",
+    "shortDescription": "Spotlight-style launcher and LAN file transfer",
+    "longDescription": "Synapt is a Spotlight-style launcher and LAN file utility. Summon it with a global hotkey to search your files and transfer them to trusted devices on your local network over an encrypted peer-to-peer connection.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
