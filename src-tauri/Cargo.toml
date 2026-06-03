@@ -1,8 +1,10 @@
 [package]
 name = "synapt"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "0.3.1"
+description = "Spotlight-style launcher and encrypted LAN file utility"
+authors = ["Aatish Bagal <dev@aatish.io>"]
+license = "Apache-2.0"
+repository = "https://github.com/aatishbagal/synapt"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

@@ -1,0 +1,115 @@
+name: Release
+
+# Fires when dev is merged into main (a merge is a push to main).
+# A release is only cut when the version in src-tauri/tauri.conf.json does not
+# yet have a matching tag, so bumping the version in your PR is the deliberate
+# "make a release" signal. Merges that do not bump the version are no-ops.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      exists: ${{ steps.tag.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from tauri.conf.json
+        id: version
+        run: echo "version=$(jq -r .version src-tauri/tauri.conf.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether this version is already released
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "v${{ steps.version.outputs.version }}" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "v${{ steps.version.outputs.version }} already released - skipping."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "v${{ steps.version.outputs.version }} is new - will build a release."
+          fi
+
+  release:
+    needs: check
+    if: needs.check.outputs.exists == 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+          - platform: windows-latest
+    runs-on: ${{ matrix.platform }}
+    steps:
+      # The Synapt app lives in this repo; synapt-core is a sibling repo that
+      # src-tauri/Cargo.toml references via path = "../../synapt-core". Checking
+      # both out side by side reproduces the local directory layout so the path
+      # dependency resolves.
+      - name: Checkout synapt
+        uses: actions/checkout@v4
+        with:
+          path: synapt
+
+      - name: Checkout synapt-core
+        uses: actions/checkout@v4
+        with:
+          repository: aatishbagal/synapt-core
+          path: synapt-core
+          # If synapt-core is PRIVATE, the default GITHUB_TOKEN cannot read it.
+          # Create a fine-grained PAT with read access to synapt-core, store it
+          # as a repo secret named SYNAPT_CORE_TOKEN, and uncomment the next line.
+          # token: ${{ secrets.SYNAPT_CORE_TOKEN }}
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            libssl-dev \
+            libxdo-dev \
+            file \
+            wget
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: synapt/package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: synapt/src-tauri
+
+      - name: Install frontend dependencies
+        working-directory: synapt
+        run: npm ci
+
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: synapt
+          tagName: v__VERSION__
+          releaseName: Synapt v__VERSION__
+          releaseBody: Built from main. Download the installer for your platform below.
+          releaseDraft: false
+          prerelease: false
