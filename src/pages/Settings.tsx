@@ -163,6 +163,7 @@ export const Settings: React.FC = () => {
   const [theme, setTheme] = useState('dark');
 
   const [history, setHistory] = useState<TransferHistory[]>([]);
+  const [ipcActive, setIpcActive] = useState(false);
 
   const loadTrusted = useCallback(async () => {
     setTrusted(await invoke<TrustedPeer[]>('get_trusted_peers').catch(() => []));
@@ -191,6 +192,7 @@ export const Settings: React.FC = () => {
       applyTheme(t);
 
       setAutostart(await invoke<boolean>('get_autostart').catch(() => false));
+      setIpcActive(await invoke<boolean>('get_ipc_status').catch(() => false));
 
       await loadTrusted();
       await loadSharedDirs();
@@ -589,6 +591,19 @@ export const Settings: React.FC = () => {
             <a href={REPO_URL} target="_blank" rel="noreferrer" className="text-xs" style={{ color: 'var(--accent)' }}>
               {REPO_URL}
             </a>
+            <div className="flex items-center gap-2 mt-1" title="SynaptClip integration endpoint — v0.5">
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded"
+                style={
+                  ipcActive
+                    ? { backgroundColor: 'var(--surface-hover)', color: 'var(--accent)', border: '1px solid var(--accent)' }
+                    : { backgroundColor: 'var(--surface-hover)', color: 'var(--muted)', border: '1px solid var(--border)' }
+                }
+              >
+                {ipcActive ? 'API active' : 'API inactive'}
+              </span>
+              <span className="text-xs" style={{ color: 'var(--muted)' }}>SynaptClip integration endpoint</span>
+            </div>
           </div>
         </Section>
       </div>

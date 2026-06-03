@@ -8,6 +8,7 @@ mod platform;
 mod search;
 mod share;
 mod notify;
+mod ipc;
 
 use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
@@ -195,6 +196,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             });
 
+            // Local IPC server for SynaptClip integration (stub in v0.4).
+            tokio::spawn(async move {
+                crate::ipc::server::start().await;
+            });
+
             // Installed-application scan, independent of the file index.
             let db_for_apps = Arc::clone(&db);
             tokio::spawn(async move {
@@ -270,6 +276,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::open_dir_picker,
             commands::set_autostart,
             commands::get_autostart,
+            commands::get_ipc_status,
             commands::set_hotkey,
             commands::request_file_cmd,
             commands::request_files_cmd,

@@ -259,6 +259,19 @@ pub async fn get_autostart() -> Result<bool, String> {
     crate::platform::autostart::is_enabled().map_err(|e| e.to_string())
 }
 
+/// Probe the local IPC server's health endpoint; true when it responds 200.
+#[tauri::command]
+pub async fn get_ipc_status() -> Result<bool, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(1))
+        .build()
+        .map_err(|e| e.to_string())?;
+    match client.get("http://127.0.0.1:57321/v1/health").send().await {
+        Ok(resp) => Ok(resp.status().is_success()),
+        Err(_) => Ok(false),
+    }
+}
+
 /// Show a native folder picker. Returns the chosen path, or None if cancelled.
 #[tauri::command]
 pub async fn open_dir_picker(app: tauri::AppHandle) -> Result<Option<String>, String> {
