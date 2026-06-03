@@ -14,6 +14,7 @@ use std::sync::Arc;
 use tauri::Emitter;
 use tauri::Manager;
 use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use crate::network::PeerMap;
 use crate::network::TransferQueue;
 use crate::trust::LocalIdentity;
@@ -24,9 +25,14 @@ use crate::search::engine::SearchEngine;
 /// All live runtime state shared across Tauri commands.
 pub struct AppState {
     pub db:           Arc<Db>,
-    pub identity:     Arc<LocalIdentity>,
+    /// Local identity, behind a lock so the device name can be changed at runtime.
+    pub identity:     Arc<RwLock<LocalIdentity>>,
     pub peer_map:     PeerMap,
     pub trusted_ids:  Arc<std::sync::Mutex<HashSet<String>>>,
+    /// Device name shared with the discovery thread so renames take effect live.
+    pub discovery_name: Arc<std::sync::Mutex<String>>,
+    /// Set to force the discovery thread to emit a presence packet immediately.
+    pub rebroadcast:  Arc<AtomicBool>,
     /// Channel sender for accepting/rejecting incoming pair requests.
     pub pair_tx:      Arc<Mutex<Option<tokio::sync::oneshot::Sender<bool>>>>,
     /// Pending outbound pairing (initiator side, waiting for user confirmation).
@@ -56,10 +62,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         trusted_rows.iter().map(|r| r.device_id.clone()).collect::<HashSet<_>>(),
     ));
 
+    let discovery_name = Arc::new(std::sync::Mutex::new(identity.device_name.clone()));
+    let rebroadcast = Arc::new(AtomicBool::new(false));
     let peer_map = network::start_discovery(
         identity.device_id,
-        identity.device_name.clone(),
+        Arc::clone(&discovery_name),
         Arc::clone(&trusted_ids),
+        Arc::clone(&rebroadcast),
     )?;
 
     let pair_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<bool>>>> = Arc::new(Mutex::new(None));
@@ -82,11 +91,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .flatten()
         .unwrap_or_else(|| "ctrl+space".to_string());
 
+    // The background network servers hold an immutable Arc<LocalIdentity>; the
+    // commands layer holds a separate lockable copy whose device name can change.
+    let identity_lock = Arc::new(RwLock::new((*identity).clone()));
+
     let state = AppState {
         db:            Arc::clone(&db),
-        identity:      Arc::clone(&identity),
+        identity:      Arc::clone(&identity_lock),
         peer_map,
         trusted_ids:   Arc::clone(&trusted_ids),
+        discovery_name: Arc::clone(&discovery_name),
+        rebroadcast:   Arc::clone(&rebroadcast),
         pair_tx:       Arc::clone(&pair_tx),
         pending_pair:  Arc::clone(&pending_pair),
         file_index:    Arc::clone(&file_index),
@@ -97,6 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .manage(state)
         .setup(move |app| {
             platform::setup_current();
@@ -235,6 +251,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::remove_shared_dir,
             commands::get_setting,
             commands::set_setting,
+            commands::get_all_settings,
+            commands::get_indexed_dir_stats,
+            commands::set_device_name,
+            commands::get_local_identity,
+            commands::open_dir_picker,
             commands::set_hotkey,
             commands::request_file_cmd,
             commands::request_files_cmd,

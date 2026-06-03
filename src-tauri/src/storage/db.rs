@@ -108,6 +108,16 @@ impl Db {
         Ok(value)
     }
 
+    /// Get every setting as a key/value map.
+    pub async fn get_all_settings(
+        &self,
+    ) -> Result<std::collections::HashMap<String, String>, DbError> {
+        let rows = sqlx::query_as::<_, (String, String)>("SELECT key, value FROM settings")
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows.into_iter().collect())
+    }
+
     /// Set a setting value.
     pub async fn set_setting(&self, key: &str, value: &str) -> Result<(), DbError> {
         sqlx::query(
@@ -174,6 +184,15 @@ impl Db {
         .fetch_optional(&self.pool)
         .await?;
         Ok(row)
+    }
+
+    /// Rename the local device identity row.
+    pub async fn update_local_device_name(&self, name: &str) -> Result<(), DbError> {
+        sqlx::query("UPDATE local_device SET device_name = ? WHERE id = 'self'")
+            .bind(name)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     /// Insert the local device identity (first run only).
@@ -355,6 +374,16 @@ impl Db {
     pub async fn get_indexed_dirs(&self) -> Result<Vec<IndexedDirRow>, DbError> {
         let rows = sqlx::query_as::<_, IndexedDirRow>(
             "SELECT path, file_count, last_indexed FROM indexed_dirs ORDER BY path",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Return indexed directories with their file counts and last-scan times.
+    pub async fn get_indexed_dir_stats(&self) -> Result<Vec<IndexedDirRow>, DbError> {
+        let rows = sqlx::query_as::<_, IndexedDirRow>(
+            "SELECT path, file_count, last_indexed FROM indexed_dirs ORDER BY path ASC",
         )
         .fetch_all(&self.pool)
         .await?;

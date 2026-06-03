@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
@@ -64,17 +65,21 @@ pub fn select_interface() -> Ipv4Addr {
 
 /// Start the discovery background thread.
 /// Returns the shared PeerMap for reading from Tauri commands.
+///
+/// `device_name` is shared so a rename in Settings is reflected in the next
+/// broadcast; setting `rebroadcast` forces an immediate presence packet.
 pub fn start(
     local_device_id: Uuid,
-    device_name: String,
+    device_name: Arc<Mutex<String>>,
     trusted_ids: Arc<Mutex<std::collections::HashSet<String>>>,
+    rebroadcast: Arc<AtomicBool>,
 ) -> Result<PeerMap, DiscoveryError> {
     let peer_map: PeerMap = Arc::new(Mutex::new(HashMap::new()));
     let pm = Arc::clone(&peer_map);
     let interface_ip = select_interface();
 
     std::thread::spawn(move || {
-        if let Err(e) = run_loop(pm, interface_ip, local_device_id, device_name, trusted_ids) {
+        if let Err(e) = run_loop(pm, interface_ip, local_device_id, device_name, trusted_ids, rebroadcast) {
             tracing::error!("discovery loop terminated: {}", e);
         }
     });
@@ -86,8 +91,9 @@ fn run_loop(
     pm: PeerMap,
     interface_ip: Ipv4Addr,
     local_device_id: Uuid,
-    device_name: String,
+    device_name: Arc<Mutex<String>>,
     trusted_ids: Arc<Mutex<std::collections::HashSet<String>>>,
+    rebroadcast: Arc<AtomicBool>,
 ) -> Result<(), DiscoveryError> {
     let socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), MULTICAST_PORT))?;
     socket.set_read_timeout(Some(Duration::from_millis(500)))?;
@@ -98,11 +104,12 @@ fn run_loop(
     let mut last_tx = Instant::now() - BROADCAST_INTERVAL;
 
     loop {
-        if last_tx.elapsed() >= BROADCAST_INTERVAL {
+        let forced = rebroadcast.swap(false, Ordering::Relaxed);
+        if forced || last_tx.elapsed() >= BROADCAST_INTERVAL {
             let pkt = PresencePacket {
                 r#type:       "presence".into(),
                 device_id:    local_device_id.to_string(),
-                device_name:  device_name.clone(),
+                device_name:  lock(&device_name).clone(),
                 version:      "0.1.0".into(),
                 pairing_port: PAIRING_PORT,
             };
