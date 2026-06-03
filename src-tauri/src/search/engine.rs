@@ -101,23 +101,48 @@ impl SearchEngine {
         query: &str,
         max_results: usize,
     ) -> Result<Vec<SearchResult>, SearchError> {
-        let q = query.to_lowercase();
-        if q.is_empty() {
+        let query_trimmed = query.trim();
+        if query_trimmed.is_empty() {
             return Ok(Vec::new());
         }
+
+        // Star syntax: an explicit power-user contains search. A leading and/or
+        // trailing '*' routes straight to the wildcard stage, skipping the trie,
+        // standard tantivy, and fuzzy stages.
+        if query_trimmed.starts_with('*') || query_trimmed.ends_with('*') {
+            let stripped = query_trimmed.trim_matches('*').to_lowercase();
+            if stripped.is_empty() {
+                return Ok(Vec::new());
+            }
+            let results = self
+                .index
+                .search_wildcard(&stripped, max_results)?
+                .into_iter()
+                .map(|path| SearchResult {
+                    name: file_name_of(&path),
+                    path,
+                    source: ResultSource::Local,
+                    score: 0.65,
+                })
+                .collect();
+            return Ok(results);
+        }
+
+        let q = query_trimmed.to_lowercase();
 
         if let Some(hit) = lock(&self.cache).get(&q) {
             return Ok(hit.clone());
         }
 
         // Note: the Bloom filter is keyed on whole file names, but queries are
-        // prefixes (trie), tokens (tantivy), or substrings (fuzzy). A name-keyed
-        // membership test produces false negatives for every one of those paths,
-        // so it must not gate the search. The trie already resolves absent
-        // prefixes in O(prefix length); the bloom is left as diagnostic infra.
+        // prefixes (trie), tokens (tantivy), or substrings (wildcard/fuzzy). A
+        // name-keyed membership test produces false negatives for every one of
+        // those paths, so it must not gate the search. The trie already resolves
+        // absent prefixes in O(prefix length); the bloom is left as diagnostic infra.
         let mut results: Vec<SearchResult> = Vec::new();
         let mut seen: HashSet<String> = HashSet::new();
 
+        // 1. Trie prefix search.
         for path in lock(&self.trie).prefix_search(&q, max_results) {
             if seen.insert(path.clone()) {
                 results.push(SearchResult {
@@ -129,17 +154,37 @@ impl SearchEngine {
             }
         }
 
-        for path in self.index.search(&q, max_results)? {
-            if seen.insert(path.clone()) {
-                results.push(SearchResult {
-                    name: file_name_of(&path),
-                    path,
-                    source: ResultSource::Local,
-                    score: 0.8,
-                });
+        // 2. tantivy standard full-text (tokenised terms).
+        if results.len() < max_results {
+            for path in self.index.search(&q, max_results)? {
+                if seen.insert(path.clone()) {
+                    results.push(SearchResult {
+                        name: file_name_of(&path),
+                        path,
+                        source: ResultSource::Local,
+                        score: 0.8,
+                    });
+                }
             }
         }
 
+        // 3. tantivy wildcard substring stage — catches matches in the middle of a
+        // single token, e.g. 'test' in 'somethingtestfile.json'. Only run when the
+        // cheaper stages came up short, since the regex automaton is more expensive.
+        if results.len() < MIN_RESULTS_BEFORE_FUZZY {
+            for path in self.index.search_wildcard(&q, max_results)? {
+                if seen.insert(path.clone()) {
+                    results.push(SearchResult {
+                        name: file_name_of(&path),
+                        path,
+                        source: ResultSource::Local,
+                        score: 0.65,
+                    });
+                }
+            }
+        }
+
+        // 4. Fuzzy fallback.
         if results.len() < MIN_RESULTS_BEFORE_FUZZY {
             let candidates = self.db.search_files_by_name(&q, 500).await?;
             for m in fuzzy::match_candidates(&q, &candidates, JW_THRESHOLD, LEV_MAX_DIST, max_results)
@@ -189,11 +234,73 @@ mod tests {
         SearchEngine::init(db, index).await.unwrap()
     }
 
+    /// Build an engine whose index and database contain the given file names.
+    async fn engine_with_files(names: &[&str]) -> SearchEngine {
+        use crate::storage::FileRow;
+        let db = Arc::new(Db::open_in_memory().await.unwrap());
+        for name in names {
+            db.upsert_file(&FileRow {
+                name: name.to_string(),
+                path: format!("/tmp/{name}"),
+                parent_path: "/tmp".to_string(),
+                file_type: "file".to_string(),
+                size: None,
+                last_modified: None,
+                extension: None,
+                is_hidden: 0,
+            })
+            .await
+            .unwrap();
+        }
+        let dir = std::env::temp_dir().join(format!("synapt_engine_{}", uuid::Uuid::new_v4()));
+        let index = Arc::new(FileIndex::open(dir).unwrap());
+        index.rebuild_from_db(&db).await.unwrap();
+        SearchEngine::init(db, index).await.unwrap()
+    }
+
     #[tokio::test]
     async fn search_empty_engine_returns_empty() {
         let engine = empty_engine().await;
         let results = engine.search("anything", 50).await.unwrap();
         assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn star_syntax_routes_to_wildcard_search() {
+        // 'somethingtestfile.json' has 'test' in the middle of a single token, so
+        // only the wildcard stage can match it. '*test*' must find it directly.
+        let engine = engine_with_files(&["somethingtestfile.json"]).await;
+        let results = engine.search("*test*", 50).await.unwrap();
+        assert!(
+            results.iter().any(|r| r.name == "somethingtestfile.json"),
+            "star syntax should route to wildcard search, got {results:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn star_syntax_empty_after_stripping_returns_empty() {
+        let engine = engine_with_files(&["somethingtestfile.json"]).await;
+        assert!(engine.search("**", 50).await.unwrap().is_empty());
+        assert!(engine.search("*", 50).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn standard_query_finds_middle_substring_via_pipeline() {
+        // A bare query (no stars) must still surface middle-of-name substrings
+        // through the wildcard stage of the normal pipeline.
+        let engine = engine_with_files(&["project_test_data.json"]).await;
+        let results = engine.search("test", 50).await.unwrap();
+        assert!(
+            results.iter().any(|r| r.name == "project_test_data.json"),
+            "standard pipeline should find middle substring, got {results:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn standard_query_prefix_match_still_works() {
+        let engine = engine_with_files(&["report_final.pdf"]).await;
+        let results = engine.search("report", 50).await.unwrap();
+        assert!(results.iter().any(|r| r.name == "report_final.pdf"));
     }
 
     #[tokio::test]
