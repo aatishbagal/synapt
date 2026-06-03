@@ -268,6 +268,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::set_device_name,
             commands::get_local_identity,
             commands::open_dir_picker,
+            commands::set_autostart,
+            commands::get_autostart,
             commands::set_hotkey,
             commands::request_file_cmd,
             commands::request_files_cmd,

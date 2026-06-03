@@ -4,6 +4,7 @@ pub mod linux;
 pub mod windows;
 #[cfg(target_os = "macos")]
 pub mod macos;
+pub mod autostart;
 
 /// The active display server or OS platform.
 // Variants are platform-specific; not all are constructed on every target.

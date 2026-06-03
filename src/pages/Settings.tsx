@@ -159,6 +159,7 @@ export const Settings: React.FC = () => {
   const [maxResults, setMaxResults] = useState('50');
   const [includeHidden, setIncludeHidden] = useState(false);
   const [notifications, setNotifications] = useState(true);
+  const [autostart, setAutostart] = useState(false);
   const [theme, setTheme] = useState('dark');
 
   const [history, setHistory] = useState<TransferHistory[]>([]);
@@ -188,6 +189,8 @@ export const Settings: React.FC = () => {
       const t = settings.theme ?? 'dark';
       setTheme(t);
       applyTheme(t);
+
+      setAutostart(await invoke<boolean>('get_autostart').catch(() => false));
 
       await loadTrusted();
       await loadSharedDirs();
@@ -313,6 +316,14 @@ export const Settings: React.FC = () => {
   const toggleNotifications = async (checked: boolean) => {
     setNotifications(checked);
     await invoke('set_setting', { key: 'notifications_enabled', value: String(checked) }).catch(() => undefined);
+  };
+  const toggleAutostart = async (checked: boolean) => {
+    setAutostart(checked);
+    try {
+      await invoke('set_autostart', { enabled: checked });
+    } catch {
+      setAutostart(!checked);
+    }
   };
   const changeTheme = async (value: string) => {
     setTheme(value);
@@ -519,6 +530,16 @@ export const Settings: React.FC = () => {
                 style={{ accentColor: 'var(--accent)' }}
               />
               <span className="text-xs" style={{ color: 'var(--text)' }}>System notifications</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autostart}
+                onChange={e => toggleAutostart(e.target.checked)}
+                style={{ accentColor: 'var(--accent)' }}
+              />
+              <span className="text-xs" style={{ color: 'var(--text)' }}>Start on login</span>
             </label>
 
             <label className="flex items-center justify-between">

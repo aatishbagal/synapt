@@ -239,6 +239,26 @@ pub async fn set_device_name(
     Ok(())
 }
 
+/// Enable or disable launching Synapt automatically on login.
+#[tauri::command]
+pub async fn set_autostart(enabled: bool, _app: tauri::AppHandle) -> Result<(), String> {
+    let exe_path = std::env::current_exe()
+        .map_err(|e| e.to_string())?
+        .to_string_lossy()
+        .to_string();
+    if enabled {
+        crate::platform::autostart::enable(&exe_path).map_err(|e| e.to_string())
+    } else {
+        crate::platform::autostart::disable().map_err(|e| e.to_string())
+    }
+}
+
+/// Report whether Synapt is configured to launch on login.
+#[tauri::command]
+pub async fn get_autostart() -> Result<bool, String> {
+    crate::platform::autostart::is_enabled().map_err(|e| e.to_string())
+}
+
 /// Show a native folder picker. Returns the chosen path, or None if cancelled.
 #[tauri::command]
 pub async fn open_dir_picker(app: tauri::AppHandle) -> Result<Option<String>, String> {
