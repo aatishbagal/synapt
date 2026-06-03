@@ -1,6 +1,11 @@
 # Synapt
 
-![Synapt](./assets/images/logo/png/SynaptV2_White_PNG.png)
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/images/logo/png/SynaptV2_White_PNG_512sq.png">
+    <img src="./assets/images/logo/png/SynaptV2_Black_PNG_512sq.png" alt="Synapt" width="120">
+  </picture>
+</p>
 
 Synapt is a Spotlight-style launcher and LAN file utility — summon it with a global hotkey, search your files, and transfer them to trusted devices on your local network.
 
@@ -50,7 +55,7 @@ Synapt is a Spotlight-style launcher and LAN file utility — summon it with a g
 ### Build from source
 
 ```bash
-git clone https://github.com/[username]/synapt.git
+git clone https://github.com/aatishbagal/synapt.git
 cd synapt
 bash install.sh   # clones synapt-core into the correct relative path
 
@@ -68,6 +73,11 @@ GNOME does not support system trays by default. Install the [AppIndicator and KS
 ## Security
 
 Synapt uses X25519 Elliptic Curve Diffie-Hellman for key exchange, ChaCha20-Poly1305 for all network traffic, and HKDF-SHA256 for key derivation. Device pairing uses a code-verification ceremony to detect man-in-the-middle attacks. Trusted peers can only access directories you explicitly add to the shared list. Trust can be revoked at any time from Settings.
+
+## Related
+
+- [synapt-clip](https://github.com/aatishbagal/synapt-clip) — clipboard manager with optional cross-device clipboard sharing
+- [synapt-core](https://github.com/aatishbagal/synapt-core) — shared type library used across the Synapt apps
 
 ## License
 
