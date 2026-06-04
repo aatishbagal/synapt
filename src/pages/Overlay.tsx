@@ -38,6 +38,9 @@ export const Overlay: React.FC = () => {
   const [showDevicePicker, setShowDevicePicker] = useState(false);
   const [devicePickerIndex, setDevicePickerIndex] = useState(0);
   const [confirmingTransfer, setConfirmingTransfer] = useState<SearchResult | null>(null);
+  const [expandedResultPath, setExpandedResultPath] = useState<string | null>(null);
+  const [expandedActionIndex, setExpandedActionIndex] = useState(0);
+  const [sendToDevicesPath, setSendToDevicesPath] = useState<string | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -212,9 +215,9 @@ export const Overlay: React.FC = () => {
   const handleEnter = () => {
     const result = results[selectedIndex];
     if (selectedIndex < 0 || !result) return;
-    // Remote file results require an explicit download confirmation rather than
-    // opening a non-local path.
-    if (selectedDevice && result.result_type === 'File') {
+    // Remote results require an explicit confirmation: a download for files, a
+    // launch for apps, rather than acting on a non-local path directly.
+    if (selectedDevice && (result.result_type === 'File' || result.result_type === 'App')) {
       setConfirmingTransfer(result);
       return;
     }
@@ -226,16 +229,62 @@ export const Overlay: React.FC = () => {
     setConfirmingTransfer(null);
     searchInputRef.current?.focus();
     if (!result || !selectedDevice) return;
-    invoke('request_file_cmd', {
-      deviceId: selectedDevice.device_id,
-      remotePath: result.path,
-    }).catch(e => setError(String(e)));
+    if (result.result_type === 'App') {
+      invoke('remote_launch_app', {
+        deviceId: selectedDevice.device_id,
+        appSourcePath: result.path,
+      }).catch(e => setError(String(e)));
+    } else {
+      invoke('request_file_cmd', {
+        deviceId: selectedDevice.device_id,
+        remotePath: result.path,
+      }).catch(e => setError(String(e)));
+    }
   };
 
   const cancelTransfer = () => {
     setConfirmingTransfer(null);
     searchInputRef.current?.focus();
   };
+
+  // Right-arrow file action expansion (local files only).
+  const expandActions = () => {
+    const result = results[selectedIndex];
+    if (selectedIndex >= 0 && result && result.result_type === 'File' && !selectedDevice) {
+      setExpandedResultPath(result.path);
+      setExpandedActionIndex(0);
+    }
+  };
+
+  const executeExpandedAction = (path: string, actionIndex: number) => {
+    if (actionIndex === 0) {
+      invoke('open_file_path', { path }).catch(() => {});
+      invoke('hide_window').catch(() => {});
+      setExpandedResultPath(null);
+    } else if (actionIndex === 1) {
+      invoke('reveal_in_files', { path }).catch(() => {});
+      invoke('hide_window').catch(() => {});
+      setExpandedResultPath(null);
+    } else {
+      setExpandedResultPath(null);
+      setSendToDevicesPath(path);
+    }
+  };
+
+  const closeSendToDevices = () => {
+    setSendToDevicesPath(null);
+    searchInputRef.current?.focus();
+  };
+
+  // Collapse the action expansion when the query or the highlighted row changes.
+  useEffect(() => {
+    setExpandedResultPath(null);
+    setSendToDevicesPath(null);
+  }, [inputValue]);
+
+  useEffect(() => {
+    setExpandedResultPath(null);
+  }, [selectedIndex]);
 
   const selectDevice = (device: DeviceOption) => {
     setSelectedDevice(device);
@@ -279,6 +328,13 @@ export const Overlay: React.FC = () => {
   };
 
   const hasQuery = parsedInput.query.length > 0;
+  const currentResult = selectedIndex >= 0 ? results[selectedIndex] : undefined;
+  const canExpand =
+    !!currentResult &&
+    currentResult.result_type === 'File' &&
+    !selectedDevice &&
+    expandedResultPath === null &&
+    sendToDevicesPath === null;
 
   return (
     <div
@@ -328,14 +384,23 @@ export const Overlay: React.FC = () => {
           selectedDevice={selectedDevice}
           onClearDevice={clearDevice}
           showDevicePicker={showDevicePicker}
+          canExpand={canExpand}
+          expanded={expandedResultPath !== null}
           onArrowDown={handleArrowDown}
           onArrowUp={handleArrowUp}
+          onArrowRight={expandActions}
           onEnter={handleEnter}
           onEscape={() => invoke('hide_window').catch(() => {})}
           onPickerArrowDown={handlePickerArrowDown}
           onPickerArrowUp={handlePickerArrowUp}
           onPickerSelect={handlePickerSelect}
           onPickerClose={handlePickerClose}
+          onExpandArrowDown={() => setExpandedActionIndex(i => (i + 1) % 3)}
+          onExpandArrowUp={() => setExpandedActionIndex(i => (i + 2) % 3)}
+          onExpandEnter={() => {
+            if (expandedResultPath) executeExpandedAction(expandedResultPath, expandedActionIndex);
+          }}
+          onExpandCollapse={() => setExpandedResultPath(null)}
         />
         {showDevicePicker && (
           <DevicePicker
@@ -389,11 +454,21 @@ export const Overlay: React.FC = () => {
             confirmingPath={confirmingTransfer?.path ?? null}
             confirmMessage={
               confirmingTransfer && selectedDevice
-                ? `Download ${confirmingTransfer.name} from ${selectedDevice.device_name}?`
+                ? confirmingTransfer.result_type === 'App'
+                  ? `Launch ${confirmingTransfer.name} on ${selectedDevice.device_name}?`
+                  : `Download ${confirmingTransfer.name} from ${selectedDevice.device_name}?`
                 : ''
             }
+            confirmLabel={confirmingTransfer?.result_type === 'App' ? 'Launch' : 'Download'}
             onConfirmTransfer={confirmTransfer}
             onCancelTransfer={cancelTransfer}
+            expandedPath={expandedResultPath}
+            expandedActionIndex={expandedActionIndex}
+            onActionHover={setExpandedActionIndex}
+            onActionExecute={executeExpandedAction}
+            sendToDevicesPath={sendToDevicesPath}
+            devices={availableDevices}
+            onCloseSendToDevices={closeSendToDevices}
           />
         )}
       </div>

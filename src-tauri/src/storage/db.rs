@@ -510,6 +510,20 @@ impl Db {
         Ok(())
     }
 
+    /// Look up the indexed exec string for an application by its source path.
+    /// Used to validate remote launch requests against the local app index.
+    pub async fn app_exec_by_source_path(
+        &self,
+        source_path: &str,
+    ) -> Result<Option<String>, DbError> {
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT exec FROM applications WHERE source_path = ?")
+                .bind(source_path)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row.map(|r| r.0))
+    }
+
     /// Open an in-memory database with migrations applied, for tests only.
     #[cfg(test)]
     pub async fn open_in_memory() -> Result<Self, DbError> {

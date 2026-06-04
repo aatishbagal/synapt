@@ -11,14 +11,21 @@ interface Props {
   selectedDevice: { device_id: string; device_name: string } | null;
   onClearDevice: (reopenPicker: boolean) => void;
   showDevicePicker: boolean;
+  canExpand: boolean;
+  expanded: boolean;
   onArrowDown: () => void;
   onArrowUp: () => void;
+  onArrowRight: () => void;
   onEnter: () => void;
   onEscape: () => void;
   onPickerArrowDown: () => void;
   onPickerArrowUp: () => void;
   onPickerSelect: () => void;
   onPickerClose: () => void;
+  onExpandArrowDown: () => void;
+  onExpandArrowUp: () => void;
+  onExpandEnter: () => void;
+  onExpandCollapse: () => void;
 }
 
 const MODE_LABELS: Record<InputMode, string> = {
@@ -36,14 +43,21 @@ export const SearchBar: React.FC<Props> = ({
   selectedDevice,
   onClearDevice,
   showDevicePicker,
+  canExpand,
+  expanded,
   onArrowDown,
   onArrowUp,
+  onArrowRight,
   onEnter,
   onEscape,
   onPickerArrowDown,
   onPickerArrowUp,
   onPickerSelect,
   onPickerClose,
+  onExpandArrowDown,
+  onExpandArrowUp,
+  onExpandEnter,
+  onExpandCollapse,
 }) => {
   const [calcResult, setCalcResult] = useState<number | null>(null);
   const parsed = useMemo(() => parseInput(value, selectedDevice !== null), [value, selectedDevice]);
@@ -88,6 +102,30 @@ export const SearchBar: React.FC<Props> = ({
       return;
     }
 
+    // The file-action expansion captures navigation while it is open.
+    if (expanded) {
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          onExpandArrowDown();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          onExpandArrowUp();
+          break;
+        case 'Enter':
+          e.preventDefault();
+          onExpandEnter();
+          break;
+        case 'ArrowLeft':
+        case 'Escape':
+          e.preventDefault();
+          onExpandCollapse();
+          break;
+      }
+      return;
+    }
+
     // Backspace on an empty input with a device tag removes the tag and reopens
     // the picker so another device can be chosen.
     if (e.key === 'Backspace' && value === '' && selectedDevice) {
@@ -104,6 +142,14 @@ export const SearchBar: React.FC<Props> = ({
       case 'ArrowUp':
         e.preventDefault();
         onArrowUp();
+        break;
+      case 'ArrowRight':
+        // Only hijack ArrowRight to expand file actions; otherwise let it move
+        // the text cursor.
+        if (canExpand) {
+          e.preventDefault();
+          onArrowRight();
+        }
         break;
       case 'Enter':
         e.preventDefault();

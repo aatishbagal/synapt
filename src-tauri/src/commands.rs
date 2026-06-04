@@ -56,6 +56,18 @@ fn resolve_pairing_target(
     Ok((entry.peer.ip, entry.peer.pairing_port))
 }
 
+/// Find a trusted peer's public key by device id, or an error if not trusted.
+fn trusted_pubkey(
+    peers: &[synapt_core::TrustedPeer],
+    device_id: &str,
+) -> Result<String, String> {
+    peers
+        .iter()
+        .find(|p| p.device_id.to_string() == device_id)
+        .map(|p| p.pubkey_b64.clone())
+        .ok_or_else(|| "Device is not trusted".to_string())
+}
+
 /// Begin pairing with a discovered peer; returns the verification code to display.
 #[tauri::command]
 pub async fn begin_pairing_cmd(
@@ -650,6 +662,32 @@ pub async fn launch_app(exec: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Reveal a file in the platform file manager, selecting it where supported.
+#[tauri::command]
+pub async fn reveal_in_files(path: String) -> Result<(), String> {
+    use std::process::Command;
+    #[cfg(target_os = "linux")]
+    {
+        // Open the parent directory; selecting a specific file is not portable
+        // across Linux file managers, so we reveal the containing folder.
+        let parent = std::path::Path::new(&path)
+            .parent()
+            .ok_or_else(|| "no parent dir".to_string())?
+            .to_string_lossy()
+            .to_string();
+        Command::new("xdg-open").arg(&parent).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer").args(["/select,", &path]).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").args(["-R", &path]).spawn().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Read an application icon file and return it as a data URI the webview can
 /// render. Supports PNG and SVG; rejects files larger than 512 KB.
 #[tauri::command]
@@ -780,6 +818,55 @@ pub async fn search_remote(
         .collect())
 }
 
+/// Ask a trusted, online peer to launch one of its indexed applications. The
+/// peer validates the source path against its own application index and only
+/// runs the exec it indexed locally.
+#[tauri::command]
+pub async fn remote_launch_app(
+    device_id: String,
+    app_source_path: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<(), String> {
+    use crate::network::search_server::SearchMsg;
+
+    let peers = crate::trust::list_trusted_peers(&state.db).await.map_err(|e| e.to_string())?;
+    let peer_pubkey = trusted_pubkey(&peers, &device_id)?;
+
+    let ip = {
+        let map = lock(&state.peer_map);
+        map.get(&device_id)
+            .map(|e| e.peer.ip)
+            .ok_or_else(|| "Device is not online".to_string())?
+    };
+
+    let mut stream = tokio::net::TcpStream::connect((ip, crate::network::SEARCH_PORT))
+        .await
+        .map_err(|e| e.to_string())?;
+    let identity = state.identity.read().await;
+    let local_id = identity.device_id.to_string();
+    let key = crate::network::session_handshake_client(&mut stream, &local_id, &identity, &peer_pubkey)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let request = SearchMsg::LaunchRequest { source_path: app_source_path };
+    crate::network::write_enc(&mut stream, &key, &serde_json::to_vec(&request).map_err(|e| e.to_string())?)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let response: SearchMsg = serde_json::from_slice(
+        &crate::network::read_enc(&mut stream, &key).await.map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+
+    match response {
+        SearchMsg::LaunchResult { success: true, .. } => Ok(()),
+        SearchMsg::LaunchResult { success: false, error } => {
+            Err(error.unwrap_or_else(|| "remote launch failed".to_string()))
+        }
+        _ => Err("unexpected response from peer".to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -792,5 +879,32 @@ mod tests {
         let peer_map: crate::network::PeerMap = Arc::new(Mutex::new(HashMap::new()));
         let err = resolve_pairing_target(&peer_map, "missing-device").unwrap_err();
         assert_eq!(err, "peer not found");
+    }
+
+    fn sample_trusted_peer(device_id: uuid::Uuid) -> synapt_core::TrustedPeer {
+        synapt_core::TrustedPeer {
+            device_id,
+            device_name: "Peer".to_string(),
+            pubkey_b64: "PUBKEY".to_string(),
+            fingerprint: "fp".to_string(),
+            paired_at: 0,
+            last_seen: None,
+        }
+    }
+
+    #[test]
+    fn trusted_pubkey_errors_when_device_not_trusted() {
+        // remote_launch_app refuses any device id absent from the trust store.
+        let known = uuid::Uuid::new_v4();
+        let peers = vec![sample_trusted_peer(known)];
+        let err = trusted_pubkey(&peers, &uuid::Uuid::new_v4().to_string()).unwrap_err();
+        assert_eq!(err, "Device is not trusted");
+    }
+
+    #[test]
+    fn trusted_pubkey_returns_key_for_trusted_device() {
+        let known = uuid::Uuid::new_v4();
+        let peers = vec![sample_trusted_peer(known)];
+        assert_eq!(trusted_pubkey(&peers, &known.to_string()).unwrap(), "PUBKEY");
     }
 }

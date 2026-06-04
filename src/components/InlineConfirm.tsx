@@ -2,12 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 
 interface Props {
   message: string;
+  confirmLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
 /** Inline confirmation overlaid on a result row, e.g. before a remote download. */
-export const InlineConfirm: React.FC<Props> = ({ message, onConfirm, onCancel }) => {
+export const InlineConfirm: React.FC<Props> = ({
+  message,
+  confirmLabel = 'Download',
+  onConfirm,
+  onCancel,
+}) => {
   const [focused, setFocused] = useState<'confirm' | 'cancel'>('confirm');
   const confirmRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -69,7 +75,7 @@ export const InlineConfirm: React.FC<Props> = ({ message, onConfirm, onCancel })
             border: '1px solid var(--accent)',
           }}
         >
-          Download
+          {confirmLabel}
         </button>
         <button
           ref={cancelRef}
