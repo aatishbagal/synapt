@@ -25,10 +25,6 @@
         "skipTaskbar": true
       }
     ],
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": false
-    },
     "security": {
       "csp": null
     }
