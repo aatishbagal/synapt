@@ -1,5 +1,6 @@
 import React from 'react';
 import { AppIcon } from './AppIcon';
+import { InlineConfirm } from './InlineConfirm';
 import { SearchResult } from '../types';
 
 interface Props {
@@ -7,6 +8,10 @@ interface Props {
   selectedIndex: number;
   onSelect: (result: SearchResult) => void;
   onHover: (index: number) => void;
+  confirmingPath?: string | null;
+  confirmMessage?: string;
+  onConfirmTransfer?: () => void;
+  onCancelTransfer?: () => void;
 }
 
 function isRemote(source: SearchResult['source']): source is { Remote: { device_name: string } } {
@@ -32,13 +37,23 @@ function FileIcon(): React.ReactElement {
   );
 }
 
-export const ResultList: React.FC<Props> = ({ results, selectedIndex, onSelect, onHover }) => {
+export const ResultList: React.FC<Props> = ({
+  results,
+  selectedIndex,
+  onSelect,
+  onHover,
+  confirmingPath,
+  confirmMessage,
+  onConfirmTransfer,
+  onCancelTransfer,
+}) => {
   return (
     <div>
       {results.map((result, index) => {
         const selected = index === selectedIndex;
         const isApp = result.result_type === 'App';
         const remote = isRemote(result.source);
+        const confirming = confirmingPath != null && result.path === confirmingPath;
         return (
           <div
             key={`${result.path}-${index}`}
@@ -46,10 +61,18 @@ export const ResultList: React.FC<Props> = ({ results, selectedIndex, onSelect, 
             onMouseEnter={() => onHover(index)}
             className="flex items-center justify-between gap-2 px-3 py-2.5 cursor-pointer transition-colors"
             style={{
+              position: 'relative',
               borderBottom: '1px solid var(--border)',
               backgroundColor: selected ? 'var(--surface-hover)' : 'transparent',
             }}
           >
+            {confirming && (
+              <InlineConfirm
+                message={confirmMessage ?? ''}
+                onConfirm={() => onConfirmTransfer?.()}
+                onCancel={() => onCancelTransfer?.()}
+              />
+            )}
             <div className="flex items-center flex-1 min-w-0" style={{ gap: '10px' }}>
               {isApp ? (
                 <AppIcon iconPath={result.icon_path} size={20} />

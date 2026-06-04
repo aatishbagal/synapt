@@ -7,6 +7,8 @@ import { PairingDialog } from '../components/PairingDialog';
 import { SearchBar } from '../components/SearchBar';
 import { ResultList } from '../components/ResultList';
 import { DevicePicker } from '../components/DevicePicker';
+import { SearchLoadingBar } from '../components/SearchLoadingBar';
+import { TransferCard } from '../components/TransferCard';
 import { IndexingBanner } from '../components/IndexingBanner';
 import { Peer, SearchResult, TrustedPeer, DeviceOption } from '../types';
 import { useTheme } from '../hooks/useTheme';
@@ -35,6 +37,7 @@ export const Overlay: React.FC = () => {
   const [selectedDevice, setSelectedDevice] = useState<DeviceOption | null>(null);
   const [showDevicePicker, setShowDevicePicker] = useState(false);
   const [devicePickerIndex, setDevicePickerIndex] = useState(0);
+  const [confirmingTransfer, setConfirmingTransfer] = useState<SearchResult | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -208,7 +211,30 @@ export const Overlay: React.FC = () => {
 
   const handleEnter = () => {
     const result = results[selectedIndex];
-    if (selectedIndex >= 0 && result) openSelected(result);
+    if (selectedIndex < 0 || !result) return;
+    // Remote file results require an explicit download confirmation rather than
+    // opening a non-local path.
+    if (selectedDevice && result.result_type === 'File') {
+      setConfirmingTransfer(result);
+      return;
+    }
+    openSelected(result);
+  };
+
+  const confirmTransfer = () => {
+    const result = confirmingTransfer;
+    setConfirmingTransfer(null);
+    searchInputRef.current?.focus();
+    if (!result || !selectedDevice) return;
+    invoke('request_file_cmd', {
+      deviceId: selectedDevice.device_id,
+      remotePath: result.path,
+    }).catch(e => setError(String(e)));
+  };
+
+  const cancelTransfer = () => {
+    setConfirmingTransfer(null);
+    searchInputRef.current?.focus();
   };
 
   const selectDevice = (device: DeviceOption) => {
@@ -321,13 +347,16 @@ export const Overlay: React.FC = () => {
         )}
       </div>
 
+      <SearchLoadingBar visible={remoteSearchLoading} />
+      <TransferCard />
+
       <div className="flex-1 overflow-y-auto">
         {error && (
           <p className="text-xs px-3 py-2" style={{ color: 'var(--danger)' }}>
             {error}
           </p>
         )}
-        {(loading || remoteSearchLoading) && (
+        {loading && (
           <p className="text-sm text-center py-6" style={{ color: 'var(--muted)' }}>
             Searching...
           </p>
@@ -357,6 +386,14 @@ export const Overlay: React.FC = () => {
             selectedIndex={selectedIndex}
             onSelect={openSelected}
             onHover={setSelectedIndex}
+            confirmingPath={confirmingTransfer?.path ?? null}
+            confirmMessage={
+              confirmingTransfer && selectedDevice
+                ? `Download ${confirmingTransfer.name} from ${selectedDevice.device_name}?`
+                : ''
+            }
+            onConfirmTransfer={confirmTransfer}
+            onCancelTransfer={cancelTransfer}
           />
         )}
       </div>

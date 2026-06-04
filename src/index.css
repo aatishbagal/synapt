@@ -147,3 +147,13 @@ body {
     right: 0%;
   }
 }
+
+/* Indeterminate search loading bar: a short segment slides across the track. */
+@keyframes search-loading {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
