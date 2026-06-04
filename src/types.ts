@@ -34,6 +34,21 @@ export interface QueueEntry {
   started_at: number;
 }
 
+export type IndexPhase =
+  | { type: 'Starting' }
+  | { type: 'Scanning' }
+  | { type: 'BuildingIndex' }
+  | { type: 'Complete'; total_files: number }
+  | { type: 'Failed'; reason: string };
+
+export interface IndexProgress {
+  phase: IndexPhase;
+  files_scanned: number;
+  current_dir: string;
+  total_dirs: number;
+  dirs_done: number;
+}
+
 export type InputMode = 'local' | 'folder' | 'remote' | 'settings' | 'calc';
 
 export interface ParsedInput {
@@ -54,4 +69,5 @@ export interface SearchResult {
   result_type: ResultType;
   source: ResultSource;
   score: number;
+  icon_path: string | null;
 }

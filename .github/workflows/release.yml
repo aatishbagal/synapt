@@ -91,7 +91,9 @@ jobs:
           cache-dependency-path: synapt/package-lock.json
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        # Pinned for reproducible builds; floating @stable can break -D warnings
+        # when a new clippy release adds lints.
+        uses: dtolnay/rust-toolchain@1.96.0
 
       - name: Cache Rust build
         uses: swatinem/rust-cache@v2

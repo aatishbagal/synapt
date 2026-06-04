@@ -54,7 +54,7 @@ export const PairingDialog: React.FC<Props> = ({ mode, peer, incomingPair, onClo
     let active = true;
     (async () => {
       try {
-        const verify = await invoke<string>('begin_pairing_cmd', { device_id: peer.device_id });
+        const verify = await invoke<string>('begin_pairing_cmd', { deviceId: peer.device_id });
         if (!active) {
           return;
         }

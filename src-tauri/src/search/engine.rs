@@ -27,6 +27,9 @@ pub struct SearchResult {
     pub result_type: ResultType,
     pub source: ResultSource,
     pub score:  f64,
+    /// Absolute path to a renderable icon (applications only), or None.
+    #[serde(default)]
+    pub icon_path: Option<String>,
 }
 
 /// Whether a result is a file or an installed application.
@@ -90,6 +93,7 @@ fn file_result(path: String, score: f64) -> SearchResult {
         source: ResultSource::LocalFile,
         score,
         path,
+        icon_path: None,
     }
 }
 
@@ -204,6 +208,7 @@ impl SearchEngine {
                     result_type: ResultType::App,
                     source: ResultSource::LocalApp,
                     score: 1.0,
+                    icon_path: app.icon_path,
                 });
             }
         }
@@ -221,6 +226,7 @@ impl SearchEngine {
                         result_type: ResultType::File,
                         source: ResultSource::LocalFile,
                         score: m.score * 0.6,
+                        icon_path: None,
                     });
                 }
             }
@@ -384,7 +390,7 @@ mod tests {
         std::fs::write(work.join("quarterly_report.txt"), b"data").unwrap();
 
         db.add_indexed_dir(&work.to_string_lossy()).await.unwrap();
-        let scanned = indexer::run_full_scan(&db, false).await.unwrap();
+        let scanned = indexer::run_full_scan_no_progress(&db, false).await.unwrap();
         assert_eq!(scanned, 1, "scan should index exactly one file");
 
         let idx_dir = std::env::temp_dir().join(format!("synapt_pipe_idx_{}", uuid::Uuid::new_v4()));

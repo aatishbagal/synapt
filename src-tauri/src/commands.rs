@@ -46,17 +46,23 @@ pub async fn get_trusted_peers(
     crate::trust::list_trusted_peers(&state.db).await.map_err(|e| e.to_string())
 }
 
+/// Resolve a discovered peer's address and pairing port by device id.
+fn resolve_pairing_target(
+    peer_map: &crate::network::PeerMap,
+    device_id: &str,
+) -> Result<(std::net::IpAddr, u16), String> {
+    let map = lock(peer_map);
+    let entry = map.get(device_id).ok_or_else(|| "peer not found".to_string())?;
+    Ok((entry.peer.ip, entry.peer.pairing_port))
+}
+
 /// Begin pairing with a discovered peer; returns the verification code to display.
 #[tauri::command]
 pub async fn begin_pairing_cmd(
     device_id: String,
     state: tauri::State<'_, crate::AppState>,
 ) -> Result<String, String> {
-    let (ip, port) = {
-        let map = lock(&state.peer_map);
-        let entry = map.get(&device_id).ok_or_else(|| "peer not found".to_string())?;
-        (entry.peer.ip, entry.peer.pairing_port)
-    };
+    let (ip, port) = resolve_pairing_target(&state.peer_map, &device_id)?;
     let pending = {
         let identity = state.identity.read().await;
         crate::network::peer::begin_pairing(ip, port, &identity)
@@ -479,7 +485,10 @@ pub async fn get_transfer_history(
 
 /// Rescan the indexed directories, prune deleted files, and rebuild the index.
 #[tauri::command]
-pub async fn trigger_reindex(state: tauri::State<'_, crate::AppState>) -> Result<u64, String> {
+pub async fn trigger_reindex(
+    state: tauri::State<'_, crate::AppState>,
+    app: tauri::AppHandle,
+) -> Result<u64, String> {
     let include_hidden = state
         .db
         .get_setting("include_hidden")
@@ -487,22 +496,24 @@ pub async fn trigger_reindex(state: tauri::State<'_, crate::AppState>) -> Result
         .map_err(|e| e.to_string())?
         .map(|v| v == "true")
         .unwrap_or(false);
-    let total = crate::search::indexer::run_full_scan(&state.db, include_hidden)
+    // run_full_scan emits Failed and clears the flag itself on scan error.
+    let total = crate::search::indexer::run_full_scan(&state.db, include_hidden, &app, &state.is_indexing)
         .await
         .map_err(|e| e.to_string())?;
-    crate::search::indexer::prune_deleted(&state.db)
-        .await
-        .map_err(|e| e.to_string())?;
-    state
-        .file_index
-        .rebuild_from_db(&state.db)
-        .await
-        .map_err(|e| e.to_string())?;
+    let rebuilt = async {
+        crate::search::indexer::prune_deleted(&state.db).await.map_err(|e| e.to_string())?;
+        state.file_index.rebuild_from_db(&state.db).await.map_err(|e| e.to_string())?;
+        state.search_engine.rebuild().await.map_err(|e| e.to_string())?;
+        Ok::<(), String>(())
+    }
+    .await;
+    if let Err(e) = rebuilt {
+        crate::search::indexer::finish_err(&app, &state.is_indexing, e.clone());
+        return Err(e);
+    }
     tracing::info!("tantivy: index rebuilt after reindex");
-    state.search_engine.rebuild().await.map_err(|e| e.to_string())?;
-    state
-        .index_ready
-        .store(true, std::sync::atomic::Ordering::Relaxed);
+    state.index_ready.store(true, std::sync::atomic::Ordering::Relaxed);
+    crate::search::indexer::finish_ok(&app, &state.is_indexing, total);
     Ok(total)
 }
 
@@ -519,6 +530,7 @@ pub async fn get_indexed_dirs(
 pub async fn add_indexed_dir(
     path: String,
     state: tauri::State<'_, crate::AppState>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
     let p = std::path::Path::new(&path);
     if !p.is_dir() {
@@ -533,18 +545,21 @@ pub async fn add_indexed_dir(
         .map_err(|e| e.to_string())?
         .map(|v| v == "true")
         .unwrap_or(false);
-    crate::search::indexer::run_full_scan(&state.db, include_hidden)
+    let total = crate::search::indexer::run_full_scan(&state.db, include_hidden, &app, &state.is_indexing)
         .await
         .map_err(|e| e.to_string())?;
-    state
-        .file_index
-        .rebuild_from_db(&state.db)
-        .await
-        .map_err(|e| e.to_string())?;
-    state.search_engine.rebuild().await.map_err(|e| e.to_string())?;
-    state
-        .index_ready
-        .store(true, std::sync::atomic::Ordering::Relaxed);
+    let rebuilt = async {
+        state.file_index.rebuild_from_db(&state.db).await.map_err(|e| e.to_string())?;
+        state.search_engine.rebuild().await.map_err(|e| e.to_string())?;
+        Ok::<(), String>(())
+    }
+    .await;
+    if let Err(e) = rebuilt {
+        crate::search::indexer::finish_err(&app, &state.is_indexing, e.clone());
+        return Err(e);
+    }
+    state.index_ready.store(true, std::sync::atomic::Ordering::Relaxed);
+    crate::search::indexer::finish_ok(&app, &state.is_indexing, total);
     Ok(())
 }
 
@@ -581,6 +596,12 @@ pub async fn get_index_status(
         tantivy_ready: state.index_ready.load(std::sync::atomic::Ordering::Relaxed),
         last_scan,
     })
+}
+
+/// Report whether a file-system scan / index rebuild is currently running.
+#[tauri::command]
+pub async fn get_is_indexing(state: tauri::State<'_, crate::AppState>) -> Result<bool, String> {
+    Ok(state.is_indexing.load(std::sync::atomic::Ordering::Relaxed))
 }
 
 /// Evaluate an inline arithmetic expression.
@@ -627,6 +648,30 @@ pub async fn launch_app(exec: String) -> Result<(), String> {
         Command::new("open").arg(&exec).spawn().map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+/// Read an application icon file and return it as a data URI the webview can
+/// render. Supports PNG and SVG; rejects files larger than 512 KB.
+#[tauri::command]
+pub async fn get_app_icon(icon_path: String) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+    const MAX_ICON_BYTES: u64 = 512 * 1024;
+
+    let lower = icon_path.to_lowercase();
+    let mime = if lower.ends_with(".svg") {
+        "image/svg+xml"
+    } else if lower.ends_with(".png") {
+        "image/png"
+    } else {
+        return Err("unsupported icon format".to_string());
+    };
+
+    let meta = std::fs::metadata(&icon_path).map_err(|e| e.to_string())?;
+    if meta.len() > MAX_ICON_BYTES {
+        return Err("icon file too large".to_string());
+    }
+    let bytes = std::fs::read(&icon_path).map_err(|e| e.to_string())?;
+    Ok(format!("data:{};base64,{}", mime, BASE64.encode(&bytes)))
 }
 
 /// Scan installed applications and repopulate the applications index.
@@ -730,6 +775,22 @@ pub async fn search_remote(
             result_type: ResultType::File,
             source: ResultSource::Remote { device_name: device_name.clone() },
             score: r.score,
+            icon_path: None,
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn resolve_pairing_target_errors_when_peer_not_found() {
+        // A missing peer must yield a meaningful error, not a panic or serde error.
+        let peer_map: crate::network::PeerMap = Arc::new(Mutex::new(HashMap::new()));
+        let err = resolve_pairing_target(&peer_map, "missing-device").unwrap_err();
+        assert_eq!(err, "peer not found");
+    }
 }

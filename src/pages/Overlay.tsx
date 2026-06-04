@@ -8,45 +8,9 @@ import { PeerCard } from '../components/PeerCard';
 import { PairingDialog } from '../components/PairingDialog';
 import { SearchBar } from '../components/SearchBar';
 import { ResultList } from '../components/ResultList';
+import { IndexingBanner } from '../components/IndexingBanner';
 import { Peer, ParsedInput, SearchResult, TrustedPeer } from '../types';
 import { useTheme } from '../hooks/useTheme';
-
-const THEME_ORDER = ['dark', 'light', 'system'] as const;
-
-/** Inline 16x16 icon for the active theme: sun, moon, or monitor. */
-function ThemeIcon({ theme }: { theme: string }) {
-  const common = {
-    width: 16,
-    height: 16,
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 2,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-  };
-  if (theme === 'light') {
-    return (
-      <svg {...common}>
-        <circle cx="12" cy="12" r="4" />
-        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-      </svg>
-    );
-  }
-  if (theme === 'system') {
-    return (
-      <svg {...common}>
-        <rect x="2" y="3" width="20" height="14" rx="2" />
-        <path d="M8 21h8M12 17v4" />
-      </svg>
-    );
-  }
-  return (
-    <svg {...common}>
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-    </svg>
-  );
-}
 
 interface IncomingPair {
   device_id: string;
@@ -71,24 +35,19 @@ export const Overlay: React.FC = () => {
   const [dragOver, setDragOver] = useState(false);
   const [noIndexedDirs, setNoIndexedDirs] = useState(false);
 
-  const [theme, setTheme] = useState<string>(() => localStorage.getItem('synapt-theme') ?? 'dark');
-  const [themeHover, setThemeHover] = useState(false);
   const { apply: applyTheme } = useTheme();
 
   const nav = useNavigate();
 
+  // Reconcile the theme against the persisted setting on mount (the theme is
+  // changed from Settings; the overlay only applies it).
   useEffect(() => {
     invoke<string | null>('get_setting', { key: 'theme' })
-      .then(t => setTheme(t ?? 'dark'))
+      .then(t => applyTheme(t ?? 'dark'))
       .catch(() => undefined);
+    // applyTheme is stable for our purposes; run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const cycleTheme = async () => {
-    const next = THEME_ORDER[(THEME_ORDER.indexOf(theme as (typeof THEME_ORDER)[number]) + 1) % THEME_ORDER.length];
-    setTheme(next);
-    applyTheme(next);
-    await invoke('set_setting', { key: 'theme', value: next }).catch(() => undefined);
-  };
 
   useEffect(() => {
     const poll = async () => {
@@ -292,17 +251,6 @@ export const Overlay: React.FC = () => {
           >
             <SettingsIcon size={12} />
           </button>
-          <button
-            type="button"
-            onClick={cycleTheme}
-            title="Toggle theme"
-            onMouseEnter={() => setThemeHover(true)}
-            onMouseLeave={() => setThemeHover(false)}
-            className="flex items-center px-2 py-1 rounded transition-colors"
-            style={{ color: themeHover ? 'var(--text)' : 'var(--muted)' }}
-          >
-            <ThemeIcon theme={theme} />
-          </button>
         </div>
       </div>
 
@@ -405,6 +353,8 @@ export const Overlay: React.FC = () => {
           onClose={() => setIncomingPair(null)}
         />
       )}
+
+      <IndexingBanner />
     </div>
   );
 };
