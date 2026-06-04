@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { IndexPhase, IndexProgress } from '../types';
+import { UnderlineLoader } from './UnderlineLoader';
 
 /** Human-readable label for the current indexing phase. */
 function phaseLabel(phase: IndexPhase, filesScanned: number): string {
@@ -18,21 +19,11 @@ function phaseLabel(phase: IndexPhase, filesScanned: number): string {
   }
 }
 
-/** Dot colour for the current phase: accent (active), success, or danger. */
-function dotColour(phase: IndexPhase): string {
-  switch (phase.type) {
-    case 'Complete':
-      return 'var(--success)';
-    case 'Failed':
-      return 'var(--danger)';
-    default:
-      return 'var(--accent)';
-  }
-}
-
-/** Whether the dot should pulse (only while actively working). */
-function dotPulses(phase: IndexPhase): boolean {
-  return phase.type === 'Starting' || phase.type === 'Scanning' || phase.type === 'BuildingIndex';
+/** Map the current phase to the underline loader's state. */
+function loaderState(phase: IndexPhase): 'active' | 'done' | 'failed' {
+  if (phase.type === 'Complete') return 'done';
+  if (phase.type === 'Failed') return 'failed';
+  return 'active';
 }
 
 /** Fill width of the progress bar, as a percentage of the banner width. */
@@ -129,16 +120,7 @@ export const IndexingBanner: React.FC = () => {
         />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: dotColour(phase),
-            flexShrink: 0,
-            animation: dotPulses(phase) ? 'pulse 1.5s infinite' : 'none',
-          }}
-        />
+        <UnderlineLoader state={loaderState(phase)} width={20} />
         <span style={{ flex: 1, color: 'var(--text)', fontSize: 12, fontWeight: 500 }}>
           {phaseLabel(phase, progress.files_scanned)}
         </span>

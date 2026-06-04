@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import { IndexProgress, TrustedPeer } from '../types';
 import { useTheme } from '../hooks/useTheme';
 import { Select } from '../components/Select';
+import { UnderlineLoader } from '../components/UnderlineLoader';
 
 interface LocalIdentity {
   device_id: string;
@@ -515,18 +516,7 @@ export const Settings: React.FC = () => {
           )}
           {indexStatus && (
             <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
-              {indexActive && (
-                <span
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: 'var(--accent)',
-                    animation: 'pulse 1.5s infinite',
-                    flexShrink: 0,
-                  }}
-                />
-              )}
+              {indexActive && <UnderlineLoader state="active" width={20} />}
               <p className="text-xs" style={{ color: 'var(--muted)' }}>{indexStatus}</p>
             </div>
           )}
