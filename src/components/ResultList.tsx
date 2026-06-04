@@ -21,6 +21,7 @@ interface Props {
   sendToDevicesPath?: string | null;
   devices?: DeviceOption[];
   onCloseSendToDevices?: () => void;
+  resultsAreFolders?: boolean;
 }
 
 const FILE_ACTIONS = ['Open', 'Reveal in file manager', 'Send to devices'];
@@ -48,6 +49,20 @@ function FileIcon(): React.ReactElement {
   );
 }
 
+/** 16x16 folder glyph with a tab, for directory rows in folder search. */
+function FolderIcon(): React.ReactElement {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+      <path
+        d="M2 4.5C2 3.7 2.7 3 3.5 3H6L7.5 4.5H12.5C13.3 4.5 14 5.2 14 6V11.5C14 12.3 13.3 13 12.5 13H3.5C2.7 13 2 12.3 2 11.5V4.5Z"
+        stroke="var(--muted)"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export const ResultList: React.FC<Props> = ({
   results,
   selectedIndex,
@@ -65,6 +80,7 @@ export const ResultList: React.FC<Props> = ({
   sendToDevicesPath,
   devices = [],
   onCloseSendToDevices,
+  resultsAreFolders = false,
 }) => {
   return (
     <div>
@@ -103,7 +119,7 @@ export const ResultList: React.FC<Props> = ({
                     className="flex items-center justify-center shrink-0"
                     style={{ width: 20, height: 20 }}
                   >
-                    <FileIcon />
+                    {resultsAreFolders ? <FolderIcon /> : <FileIcon />}
                   </span>
                 )}
                 <div className="flex-1 min-w-0 flex flex-col gap-0.5">

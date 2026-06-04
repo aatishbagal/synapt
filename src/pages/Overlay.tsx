@@ -10,7 +10,7 @@ import { DevicePicker } from '../components/DevicePicker';
 import { SearchLoadingBar } from '../components/SearchLoadingBar';
 import { TransferCard } from '../components/TransferCard';
 import { IndexingBanner } from '../components/IndexingBanner';
-import { Peer, SearchResult, TrustedPeer, DeviceOption } from '../types';
+import { Peer, SearchResult, TrustedPeer, DeviceOption, IndexProgress } from '../types';
 import { useTheme } from '../hooks/useTheme';
 import { parseInput } from '../utils/parseInput';
 import { stepDown, stepUp } from '../utils/navigation';
@@ -32,6 +32,8 @@ export const Overlay: React.FC = () => {
   const [remoteSearchLoading, setRemoteSearchLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noIndexedDirs, setNoIndexedDirs] = useState(false);
+  const [foldersIndexed, setFoldersIndexed] = useState<boolean | null>(null);
+  const [rescanning, setRescanning] = useState(false);
 
   const [availableDevices, setAvailableDevices] = useState<DeviceOption[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<DeviceOption | null>(null);
@@ -57,6 +59,12 @@ export const Overlay: React.FC = () => {
     () => availableDevices.filter(d => d.device_name.toLowerCase().startsWith(deviceFilter)),
     [availableDevices, deviceFilter],
   );
+
+  // A leading '/' means folder search, both locally and on a tagged remote
+  // device (the remote engine routes '/' queries to a directory-only search).
+  const isFolderQuery =
+    parsedInput.mode === 'folder' ||
+    (selectedDevice !== null && parsedInput.query.startsWith('/'));
 
   // Reconcile the theme against the persisted setting on mount (the theme is
   // changed from Settings; the overlay only applies it).
@@ -117,6 +125,31 @@ export const Overlay: React.FC = () => {
   useEffect(() => {
     setSelectedIndex(-1);
   }, [results]);
+
+  // Check folder-search readiness when entering folder mode, and refresh it when
+  // an index scan completes (so the rescan nudge clears itself).
+  useEffect(() => {
+    if (parsedInput.mode === 'folder') {
+      invoke<boolean>('dirs_indexed').then(setFoldersIndexed).catch(() => setFoldersIndexed(null));
+    }
+  }, [parsedInput.mode]);
+
+  useEffect(() => {
+    const unlisten = listen<IndexProgress>('index-progress', e => {
+      if (e.payload.phase.type === 'Complete') {
+        setRescanning(false);
+        invoke<boolean>('dirs_indexed').then(setFoldersIndexed).catch(() => undefined);
+      }
+    });
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, []);
+
+  const triggerFolderRescan = () => {
+    setRescanning(true);
+    invoke('trigger_reindex').catch(() => setRescanning(false));
+  };
 
   // Open the @ device picker while the input begins with @ and no device is yet
   // selected. The @settings shortcut still routes to Settings, so it is excluded.
@@ -215,8 +248,13 @@ export const Overlay: React.FC = () => {
   const handleEnter = () => {
     const result = results[selectedIndex];
     if (selectedIndex < 0 || !result) return;
-    // Remote results require an explicit confirmation: a download for files, a
-    // launch for apps, rather than acting on a non-local path directly.
+    // Remote directory results (folder search) have no transfer/launch action;
+    // a directory cannot be downloaded as a file, so do nothing on Enter.
+    if (selectedDevice && isFolderQuery && result.result_type === 'File') {
+      return;
+    }
+    // Other remote results require an explicit confirmation: a download for
+    // files, a launch for apps, rather than acting on a non-local path directly.
     if (selectedDevice && (result.result_type === 'File' || result.result_type === 'App')) {
       setConfirmingTransfer(result);
       return;
@@ -427,7 +465,43 @@ export const Overlay: React.FC = () => {
           </p>
         )}
         {!loading && !remoteSearchLoading && !error && results.length === 0 && hasQuery && parsedInput.mode !== 'calc' && (
-          noIndexedDirs && !selectedDevice ? (
+          selectedDevice ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-1 px-6 text-center">
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>
+                No shared results from {selectedDevice.device_name}
+              </p>
+              <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                Remote search only returns files inside that device&rsquo;s shared
+                folders. Add a shared folder in Settings on {selectedDevice.device_name},
+                or it may still be indexing.
+              </p>
+            </div>
+          ) : parsedInput.mode === 'folder' ? (
+            foldersIndexed === false ? (
+              <div className="flex flex-col items-center justify-center py-8 gap-2 px-6 text-center">
+                <p className="text-sm" style={{ color: 'var(--muted)' }}>
+                  {rescanning
+                    ? 'Reindexing - folders will appear when it finishes.'
+                    : 'Folders are not indexed yet.'}
+                </p>
+                {!rescanning && (
+                  <button
+                    onClick={triggerFolderRescan}
+                    className="text-xs px-3 py-1 rounded transition-colors"
+                    style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+                  >
+                    Rescan to index folders
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center py-8">
+                <p className="text-sm" style={{ color: 'var(--muted)' }}>
+                  No folders match &ldquo;{parsedInput.query}&rdquo;
+                </p>
+              </div>
+            )
+          ) : noIndexedDirs ? (
             <div className="flex-1 flex items-center justify-center py-8">
               <button
                 onClick={() => nav('/settings')}
@@ -445,6 +519,48 @@ export const Overlay: React.FC = () => {
             </div>
           )
         )}
+        {!hasQuery &&
+          !showDevicePicker &&
+          !loading &&
+          !remoteSearchLoading &&
+          !error &&
+          results.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full px-6">
+              <div className="flex flex-col gap-2.5" style={{ width: '100%', maxWidth: '300px' }}>
+                <p
+                  className="text-[11px] uppercase tracking-wider mb-1"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  Try searching
+                </p>
+                {[
+                  { k: 'abc', d: 'Search files and apps' },
+                  { k: '/', d: 'Find folders, e.g. /Documents' },
+                  { k: '@', d: 'Search a paired device, e.g. @laptop' },
+                  { k: '1+2', d: 'Calculate, e.g. 45 * 12' },
+                ].map(tip => (
+                  <div key={tip.k} className="flex items-center gap-3">
+                    <span
+                      className="flex items-center justify-center shrink-0 text-xs"
+                      style={{
+                        width: '38px',
+                        height: '22px',
+                        borderRadius: '4px',
+                        backgroundColor: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        color: 'var(--accent)',
+                      }}
+                    >
+                      {tip.k}
+                    </span>
+                    <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                      {tip.d}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         {results.length > 0 && (
           <ResultList
             results={results}
@@ -469,6 +585,7 @@ export const Overlay: React.FC = () => {
             sendToDevicesPath={sendToDevicesPath}
             devices={availableDevices}
             onCloseSendToDevices={closeSendToDevices}
+            resultsAreFolders={isFolderQuery}
           />
         )}
       </div>

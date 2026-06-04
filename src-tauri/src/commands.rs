@@ -622,6 +622,13 @@ pub fn evaluate_expr(input: String) -> Result<f64, String> {
     crate::search::calc::evaluate(&input).map_err(|e| e.to_string())
 }
 
+/// Whether the index contains directory entries yet, so the UI can prompt for a
+/// rescan when folder search has nothing to return.
+#[tauri::command]
+pub async fn dirs_indexed(state: tauri::State<'_, crate::AppState>) -> Result<bool, String> {
+    state.db.count_dirs().await.map(|c| c > 0).map_err(|e| e.to_string())
+}
+
 /// Open a file or folder path with the platform's default handler.
 #[tauri::command]
 pub async fn open_file_path(path: String) -> Result<(), String> {
