@@ -46,17 +46,23 @@ pub async fn get_trusted_peers(
     crate::trust::list_trusted_peers(&state.db).await.map_err(|e| e.to_string())
 }
 
+/// Resolve a discovered peer's address and pairing port by device id.
+fn resolve_pairing_target(
+    peer_map: &crate::network::PeerMap,
+    device_id: &str,
+) -> Result<(std::net::IpAddr, u16), String> {
+    let map = lock(peer_map);
+    let entry = map.get(device_id).ok_or_else(|| "peer not found".to_string())?;
+    Ok((entry.peer.ip, entry.peer.pairing_port))
+}
+
 /// Begin pairing with a discovered peer; returns the verification code to display.
 #[tauri::command]
 pub async fn begin_pairing_cmd(
     device_id: String,
     state: tauri::State<'_, crate::AppState>,
 ) -> Result<String, String> {
-    let (ip, port) = {
-        let map = lock(&state.peer_map);
-        let entry = map.get(&device_id).ok_or_else(|| "peer not found".to_string())?;
-        (entry.peer.ip, entry.peer.pairing_port)
-    };
+    let (ip, port) = resolve_pairing_target(&state.peer_map, &device_id)?;
     let pending = {
         let identity = state.identity.read().await;
         crate::network::peer::begin_pairing(ip, port, &identity)
@@ -732,4 +738,19 @@ pub async fn search_remote(
             score: r.score,
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn resolve_pairing_target_errors_when_peer_not_found() {
+        // A missing peer must yield a meaningful error, not a panic or serde error.
+        let peer_map: crate::network::PeerMap = Arc::new(Mutex::new(HashMap::new()));
+        let err = resolve_pairing_target(&peer_map, "missing-device").unwrap_err();
+        assert_eq!(err, "peer not found");
+    }
 }

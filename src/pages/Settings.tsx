@@ -224,7 +224,7 @@ export const Settings: React.FC = () => {
 
   // --- Trusted Devices ---
   const removePeer = async (deviceId: string) => {
-    await invoke('revoke_peer_cmd', { device_id: deviceId }).catch(() => undefined);
+    await invoke('revoke_peer_cmd', { deviceId }).catch(() => undefined);
     await loadTrusted();
   };
 
