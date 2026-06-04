@@ -71,7 +71,37 @@ mod linux {
 
     fn parse_desktop_file(path: &std::path::Path) -> Result<AppRow, AppIndexError> {
         let content = fs::read_to_string(path)?;
-        parse_desktop_content(&content, &path.to_string_lossy())
+        let mut app = parse_desktop_content(&content, &path.to_string_lossy())?;
+        // Resolve the raw `Icon=` value (a theme name or path) to a renderable
+        // file path, or None when no icon file can be found.
+        app.icon_path = app.icon_path.as_deref().and_then(resolve_icon);
+        Ok(app)
+    }
+
+    /// Resolve a .desktop `Icon=` value to an absolute PNG/SVG path, or None.
+    /// Absolute paths are returned as-is when they exist; theme names are looked
+    /// up in the standard XDG hicolor and pixmaps directories.
+    fn resolve_icon(name_or_path: &str) -> Option<String> {
+        if name_or_path.starts_with('/') {
+            return std::path::Path::new(name_or_path)
+                .exists()
+                .then(|| name_or_path.to_string());
+        }
+        let name = name_or_path;
+        let local = dirs::data_local_dir().unwrap_or_default();
+        let search_dirs = [
+            local.join(format!("icons/hicolor/48x48/apps/{}.png", name)),
+            local.join(format!("icons/hicolor/scalable/apps/{}.svg", name)),
+            std::path::PathBuf::from(format!("/usr/share/icons/hicolor/48x48/apps/{}.png", name)),
+            std::path::PathBuf::from(format!("/usr/share/icons/hicolor/scalable/apps/{}.svg", name)),
+            std::path::PathBuf::from(format!("/usr/share/icons/hicolor/128x128/apps/{}.png", name)),
+            std::path::PathBuf::from(format!("/usr/share/pixmaps/{}.png", name)),
+            std::path::PathBuf::from(format!("/usr/share/pixmaps/{}.svg", name)),
+        ];
+        search_dirs
+            .into_iter()
+            .find(|p| p.exists())
+            .map(|p| p.to_string_lossy().to_string())
     }
 
     /// Parse the `[Desktop Entry]` section of a .desktop file body into an [`AppRow`].
@@ -165,6 +195,28 @@ Type=Application";
         fn parse_desktop_missing_exec_returns_err() {
             let entry = "[Desktop Entry]\nName=NoExec\nType=Application";
             assert!(parse_desktop_content(entry, "/x.desktop").is_err());
+        }
+
+        #[test]
+        fn resolve_icon_returns_existing_absolute_path() {
+            let file = std::env::temp_dir().join(format!("synapt_icon_{}.png", uuid::Uuid::new_v4()));
+            std::fs::write(&file, b"x").unwrap();
+            let path = file.to_string_lossy().to_string();
+            assert_eq!(resolve_icon(&path), Some(path.clone()));
+            std::fs::remove_file(&file).ok();
+        }
+
+        #[test]
+        fn resolve_icon_missing_absolute_path_returns_none() {
+            let path = format!("/nonexistent/{}/icon.png", uuid::Uuid::new_v4());
+            assert_eq!(resolve_icon(&path), None);
+        }
+
+        #[test]
+        fn resolve_icon_unknown_theme_name_returns_none() {
+            // A name that cannot exist in any icon directory resolves to None.
+            let name = format!("synapt-no-such-icon-{}", uuid::Uuid::new_v4());
+            assert_eq!(resolve_icon(&name), None);
         }
     }
 }

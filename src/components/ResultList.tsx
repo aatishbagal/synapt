@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppWindow } from 'lucide-react';
+import { AppIcon } from './AppIcon';
 import { SearchResult } from '../types';
 
 interface Props {
@@ -15,6 +15,21 @@ function isRemote(source: SearchResult['source']): source is { Remote: { device_
 
 function sourceLabel(source: SearchResult['source']): string {
   return isRemote(source) ? source.Remote.device_name : 'Local';
+}
+
+/** Generic 16x16 document glyph with a folded top-right corner, for file rows. */
+function FileIcon(): React.ReactElement {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+      <path
+        d="M4 2H9L12 5V14H4Z"
+        stroke="var(--muted)"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <path d="M9 2V5H12" stroke="var(--muted)" strokeWidth="1.2" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 export const ResultList: React.FC<Props> = ({ results, selectedIndex, onSelect, onHover }) => {
@@ -35,19 +50,15 @@ export const ResultList: React.FC<Props> = ({ results, selectedIndex, onSelect, 
               backgroundColor: selected ? 'var(--surface-hover)' : 'transparent',
             }}
           >
-            <div className="flex items-center gap-2.5 flex-1 min-w-0">
-              {isApp && (
+            <div className="flex items-center flex-1 min-w-0" style={{ gap: '10px' }}>
+              {isApp ? (
+                <AppIcon iconPath={result.icon_path} size={20} />
+              ) : (
                 <span
-                  className="flex items-center justify-center shrink-0 rounded"
-                  style={{
-                    width: '24px',
-                    height: '24px',
-                    backgroundColor: 'var(--surface-hover)',
-                    color: 'var(--accent)',
-                    border: '1px solid var(--accent)',
-                  }}
+                  className="flex items-center justify-center shrink-0"
+                  style={{ width: 20, height: 20 }}
                 >
-                  <AppWindow size={13} />
+                  <FileIcon />
                 </span>
               )}
               <div className="flex-1 min-w-0 flex flex-col gap-0.5">

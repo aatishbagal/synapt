@@ -650,6 +650,30 @@ pub async fn launch_app(exec: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Read an application icon file and return it as a data URI the webview can
+/// render. Supports PNG and SVG; rejects files larger than 512 KB.
+#[tauri::command]
+pub async fn get_app_icon(icon_path: String) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+    const MAX_ICON_BYTES: u64 = 512 * 1024;
+
+    let lower = icon_path.to_lowercase();
+    let mime = if lower.ends_with(".svg") {
+        "image/svg+xml"
+    } else if lower.ends_with(".png") {
+        "image/png"
+    } else {
+        return Err("unsupported icon format".to_string());
+    };
+
+    let meta = std::fs::metadata(&icon_path).map_err(|e| e.to_string())?;
+    if meta.len() > MAX_ICON_BYTES {
+        return Err("icon file too large".to_string());
+    }
+    let bytes = std::fs::read(&icon_path).map_err(|e| e.to_string())?;
+    Ok(format!("data:{};base64,{}", mime, BASE64.encode(&bytes)))
+}
+
 /// Scan installed applications and repopulate the applications index.
 #[tauri::command]
 pub async fn trigger_app_scan(state: tauri::State<'_, crate::AppState>) -> Result<usize, String> {
@@ -751,6 +775,7 @@ pub async fn search_remote(
             result_type: ResultType::File,
             source: ResultSource::Remote { device_name: device_name.clone() },
             score: r.score,
+            icon_path: None,
         })
         .collect())
 }

@@ -329,6 +329,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::evaluate_expr,
             commands::open_file_path,
             commands::launch_app,
+            commands::get_app_icon,
             commands::trigger_app_scan,
             commands::hide_window,
         ])

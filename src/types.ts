@@ -69,4 +69,5 @@ export interface SearchResult {
   result_type: ResultType;
   source: ResultSource;
   score: number;
+  icon_path: string | null;
 }
