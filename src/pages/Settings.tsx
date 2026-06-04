@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { ArrowLeft } from 'lucide-react';
 import { TrustedPeer } from '../types';
 import { useTheme } from '../hooks/useTheme';
+import { Select } from '../components/Select';
 
 interface LocalIdentity {
   device_id: string;
@@ -546,16 +547,15 @@ export const Settings: React.FC = () => {
 
             <label className="flex items-center justify-between">
               <span className="text-xs" style={{ color: 'var(--text)' }}>Theme</span>
-              <select
-                className="rounded px-2 py-1 text-xs w-28"
-                style={inputStyle}
+              <Select
                 value={theme}
-                onChange={e => changeTheme(e.target.value)}
-              >
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-                <option value="system">System</option>
-              </select>
+                options={[
+                  { value: 'dark', label: 'Dark' },
+                  { value: 'light', label: 'Light' },
+                  { value: 'system', label: 'System' },
+                ]}
+                onChange={changeTheme}
+              />
             </label>
           </div>
         </Section>
