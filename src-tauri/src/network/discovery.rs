@@ -1,11 +1,15 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
+use tauri::AppHandle;
 use uuid::Uuid;
 use synapt_core::{Peer, PeerStatus};
 use thiserror::Error;
+
+use crate::storage::Db;
 
 pub const MULTICAST_GROUP: Ipv4Addr = Ipv4Addr::new(239, 255, 42, 99);
 pub const MULTICAST_PORT:  u16 = 42099;
@@ -64,17 +68,25 @@ pub fn select_interface() -> Ipv4Addr {
 
 /// Start the discovery background thread.
 /// Returns the shared PeerMap for reading from Tauri commands.
+///
+/// `device_name` is shared so a rename in Settings is reflected in the next
+/// broadcast; setting `rebroadcast` forces an immediate presence packet.
 pub fn start(
     local_device_id: Uuid,
-    device_name: String,
-    trusted_ids: Arc<Mutex<std::collections::HashSet<String>>>,
+    device_name: Arc<Mutex<String>>,
+    trusted_ids: Arc<Mutex<HashSet<String>>>,
+    rebroadcast: Arc<AtomicBool>,
+    db: Arc<Db>,
+    notify_handle: Arc<OnceLock<AppHandle>>,
 ) -> Result<PeerMap, DiscoveryError> {
     let peer_map: PeerMap = Arc::new(Mutex::new(HashMap::new()));
     let pm = Arc::clone(&peer_map);
     let interface_ip = select_interface();
 
     std::thread::spawn(move || {
-        if let Err(e) = run_loop(pm, interface_ip, local_device_id, device_name, trusted_ids) {
+        if let Err(e) = run_loop(
+            pm, interface_ip, local_device_id, device_name, trusted_ids, rebroadcast, db, notify_handle,
+        ) {
             tracing::error!("discovery loop terminated: {}", e);
         }
     });
@@ -82,12 +94,16 @@ pub fn start(
     Ok(peer_map)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_loop(
     pm: PeerMap,
     interface_ip: Ipv4Addr,
     local_device_id: Uuid,
-    device_name: String,
-    trusted_ids: Arc<Mutex<std::collections::HashSet<String>>>,
+    device_name: Arc<Mutex<String>>,
+    trusted_ids: Arc<Mutex<HashSet<String>>>,
+    rebroadcast: Arc<AtomicBool>,
+    db: Arc<Db>,
+    notify_handle: Arc<OnceLock<AppHandle>>,
 ) -> Result<(), DiscoveryError> {
     let socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), MULTICAST_PORT))?;
     socket.set_read_timeout(Some(Duration::from_millis(500)))?;
@@ -96,13 +112,17 @@ fn run_loop(
 
     let dest = SocketAddr::new(IpAddr::V4(MULTICAST_GROUP), MULTICAST_PORT);
     let mut last_tx = Instant::now() - BROADCAST_INTERVAL;
+    // Trusted peers seen as online on the previous iteration, so we can notify
+    // exactly once each time one transitions from absent to present.
+    let mut last_online_trusted: HashSet<String> = HashSet::new();
 
     loop {
-        if last_tx.elapsed() >= BROADCAST_INTERVAL {
+        let forced = rebroadcast.swap(false, Ordering::Relaxed);
+        if forced || last_tx.elapsed() >= BROADCAST_INTERVAL {
             let pkt = PresencePacket {
                 r#type:       "presence".into(),
                 device_id:    local_device_id.to_string(),
-                device_name:  device_name.clone(),
+                device_name:  lock(&device_name).clone(),
                 version:      "0.1.0".into(),
                 pairing_port: PAIRING_PORT,
             };
@@ -144,6 +164,34 @@ fn run_loop(
         }
 
         lock(&pm).retain(|_, e| e.last_seen.elapsed() < PEER_TIMEOUT);
+
+        // Detect trusted peers that just appeared and fire a presence notification.
+        let newly_online: Vec<(String, String)> = {
+            let map = lock(&pm);
+            let online_trusted: HashSet<String> = map
+                .iter()
+                .filter(|(_, e)| e.peer.status == PeerStatus::Trusted)
+                .map(|(id, _)| id.clone())
+                .collect();
+            let appeared = online_trusted
+                .iter()
+                .filter(|id| !last_online_trusted.contains(*id))
+                .filter_map(|id| map.get(id).map(|e| (id.clone(), e.peer.device_name.clone())))
+                .collect();
+            last_online_trusted = online_trusted;
+            appeared
+        };
+        for (_, name) in newly_online {
+            if let Some(app) = notify_handle.get() {
+                let app = app.clone();
+                let db = Arc::clone(&db);
+                tauri::async_runtime::spawn(async move {
+                    if crate::notify::enabled(&db).await {
+                        crate::notify::peer_online(&app, &name);
+                    }
+                });
+            }
+        }
     }
 }
 

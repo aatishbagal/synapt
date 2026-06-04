@@ -19,12 +19,13 @@ pub struct LocalDeviceInfo {
 pub async fn get_local_device(
     state: tauri::State<'_, crate::AppState>,
 ) -> Result<LocalDeviceInfo, String> {
+    let identity = state.identity.read().await;
     let fingerprint =
-        crate::trust::fingerprint(&state.identity.pubkey_b64).map_err(|e| e.to_string())?;
+        crate::trust::fingerprint(&identity.pubkey_b64).map_err(|e| e.to_string())?;
     Ok(LocalDeviceInfo {
-        device_id: state.identity.device_id.to_string(),
-        device_name: state.identity.device_name.clone(),
-        pubkey_b64: state.identity.pubkey_b64.clone(),
+        device_id: identity.device_id.to_string(),
+        device_name: identity.device_name.clone(),
+        pubkey_b64: identity.pubkey_b64.clone(),
         fingerprint,
     })
 }
@@ -56,9 +57,12 @@ pub async fn begin_pairing_cmd(
         let entry = map.get(&device_id).ok_or_else(|| "peer not found".to_string())?;
         (entry.peer.ip, entry.peer.pairing_port)
     };
-    let pending = crate::network::peer::begin_pairing(ip, port, &state.identity)
-        .await
-        .map_err(|e| e.to_string())?;
+    let pending = {
+        let identity = state.identity.read().await;
+        crate::network::peer::begin_pairing(ip, port, &identity)
+            .await
+            .map_err(|e| e.to_string())?
+    };
     let code = pending.verify_code.clone();
     *state.pending_pair.lock().await = Some(pending);
     Ok(code)
@@ -68,6 +72,7 @@ pub async fn begin_pairing_cmd(
 #[tauri::command]
 pub async fn confirm_pairing_cmd(
     state: tauri::State<'_, crate::AppState>,
+    app: tauri::AppHandle,
 ) -> Result<synapt_core::TrustedPeer, String> {
     let pending = state
         .pending_pair
@@ -75,10 +80,16 @@ pub async fn confirm_pairing_cmd(
         .await
         .take()
         .ok_or_else(|| "no pending pairing".to_string())?;
-    let peer = crate::network::peer::confirm_pairing(pending, &state.identity, &state.db)
-        .await
-        .map_err(|e| e.to_string())?;
+    let peer = {
+        let identity = state.identity.read().await;
+        crate::network::peer::confirm_pairing(pending, &identity, &state.db)
+            .await
+            .map_err(|e| e.to_string())?
+    };
     lock(&state.trusted_ids).insert(peer.device_id.to_string());
+    if crate::notify::enabled(&state.db).await {
+        crate::notify::peer_paired(&app, &peer.device_name);
+    }
     Ok(peer)
 }
 
@@ -165,6 +176,121 @@ pub async fn set_setting(
     state.db.set_setting(&key, &value).await.map_err(|e| e.to_string())
 }
 
+/// Get every setting as a key/value map (loaded once by the Settings page).
+#[tauri::command]
+pub async fn get_all_settings(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    state.db.get_all_settings().await.map_err(|e| e.to_string())
+}
+
+/// List indexed directories with their file counts and last-scan times.
+#[tauri::command]
+pub async fn get_indexed_dir_stats(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<crate::storage::IndexedDirRow>, String> {
+    state.db.get_indexed_dir_stats().await.map_err(|e| e.to_string())
+}
+
+/// Local identity fields exposed to the Settings page.
+#[derive(serde::Serialize)]
+pub struct LocalIdentityInfo {
+    pub device_id:   String,
+    pub device_name: String,
+    pub fingerprint: String,
+}
+
+/// Get the local device id, name, and key fingerprint.
+#[tauri::command]
+pub async fn get_local_identity(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<LocalIdentityInfo, String> {
+    let identity = state.identity.read().await;
+    let fingerprint =
+        crate::trust::fingerprint(&identity.pubkey_b64).map_err(|e| e.to_string())?;
+    Ok(LocalIdentityInfo {
+        device_id:   identity.device_id.to_string(),
+        device_name: identity.device_name.clone(),
+        fingerprint,
+    })
+}
+
+/// Rename the local device, persist it, and re-announce presence immediately.
+#[tauri::command]
+pub async fn set_device_name(
+    name: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<(), String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || trimmed.chars().count() > 64 {
+        return Err("device name must be between 1 and 64 characters".to_string());
+    }
+    if trimmed.chars().any(|c| c.is_control()) {
+        return Err("device name must not contain control characters".to_string());
+    }
+
+    state.db.update_local_device_name(trimmed).await.map_err(|e| e.to_string())?;
+    {
+        let mut identity = state.identity.write().await;
+        identity.device_name = trimmed.to_string();
+    }
+    *lock(&state.discovery_name) = trimmed.to_string();
+    state.rebroadcast.store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
+
+/// Enable or disable launching Synapt automatically on login.
+#[tauri::command]
+pub async fn set_autostart(enabled: bool, _app: tauri::AppHandle) -> Result<(), String> {
+    let exe_path = std::env::current_exe()
+        .map_err(|e| e.to_string())?
+        .to_string_lossy()
+        .to_string();
+    if enabled {
+        crate::platform::autostart::enable(&exe_path).map_err(|e| e.to_string())
+    } else {
+        crate::platform::autostart::disable().map_err(|e| e.to_string())
+    }
+}
+
+/// Report whether Synapt is configured to launch on login.
+#[tauri::command]
+pub async fn get_autostart() -> Result<bool, String> {
+    crate::platform::autostart::is_enabled().map_err(|e| e.to_string())
+}
+
+/// Probe the local IPC server's health endpoint; true when it responds 200.
+#[tauri::command]
+pub async fn get_ipc_status() -> Result<bool, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(1))
+        .build()
+        .map_err(|e| e.to_string())?;
+    match client.get("http://127.0.0.1:57321/v1/health").send().await {
+        Ok(resp) => Ok(resp.status().is_success()),
+        Err(_) => Ok(false),
+    }
+}
+
+/// Show a native folder picker. Returns the chosen path, or None if cancelled.
+#[tauri::command]
+pub async fn open_dir_picker(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    // Keep the overlay from auto-hiding while the picker (which steals focus) is open.
+    state.suppress_hide.store(true, std::sync::atomic::Ordering::Relaxed);
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_folder(move |picked| {
+        let _ = tx.send(picked);
+    });
+    let result = rx.await.map_err(|e| e.to_string());
+    state.suppress_hide.store(false, std::sync::atomic::Ordering::Relaxed);
+    let picked = result?;
+    Ok(picked.and_then(|p| p.into_path().ok()).map(|p| p.to_string_lossy().to_string()))
+}
+
 /// Request a single file from a trusted peer; returns the local download path.
 #[tauri::command]
 pub async fn request_file_cmd(
@@ -194,11 +320,12 @@ pub async fn request_file_cmd(
             .ok_or_else(|| "peer not online".to_string())?
     };
 
+    let identity = state.identity.read().await;
     let path = crate::network::transfer::request_transfer_with_retry(
         &device_id,
         ip,
         remote_path,
-        &state.identity,
+        &identity,
         &state.db,
         &download_dir,
         &peer_name,
@@ -240,11 +367,12 @@ pub async fn request_files_cmd(
             .ok_or_else(|| "peer not online".to_string())?
     };
 
+    let identity = state.identity.read().await;
     let paths = crate::network::transfer::request_batch_transfer_with_retry(
         &device_id,
         ip,
         remote_paths,
-        &state.identity,
+        &identity,
         &state.db,
         &download_dir,
         &peer_name,
@@ -324,11 +452,12 @@ pub async fn send_files_cmd(
             .ok_or_else(|| "peer not online".to_string())?
     };
 
+    let identity = state.identity.read().await;
     crate::network::transfer::push_files(
         &device_id,
         ip,
         local_paths,
-        &state.identity,
+        &identity,
         &state.db,
         &peer_name,
         &app,
@@ -473,6 +602,39 @@ pub async fn open_file_path(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Launch an installed application by its platform-specific exec string/path.
+#[tauri::command]
+pub async fn launch_app(exec: String) -> Result<(), String> {
+    use std::process::Command;
+    #[cfg(target_os = "linux")]
+    {
+        // `exec` has already had its .desktop field codes stripped at index time.
+        let mut parts = exec.split_whitespace();
+        let program = parts.next().ok_or_else(|| "empty exec".to_string())?;
+        let args: Vec<&str> = parts.collect();
+        Command::new(program).args(args).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // Use the shell to resolve .lnk shortcuts and launch executables alike.
+        Command::new("cmd")
+            .args(["/c", "start", "", &exec])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").arg(&exec).spawn().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Scan installed applications and repopulate the applications index.
+#[tauri::command]
+pub async fn trigger_app_scan(state: tauri::State<'_, crate::AppState>) -> Result<usize, String> {
+    crate::search::app_indexer::run_app_scan(&state.db).await.map_err(|e| e.to_string())
+}
+
 /// Hide the main overlay window.
 #[tauri::command]
 pub async fn hide_window(app: tauri::AppHandle) -> Result<(), String> {
@@ -511,7 +673,7 @@ pub async fn search_remote(
     state: tauri::State<'_, crate::AppState>,
 ) -> Result<Vec<crate::search::engine::SearchResult>, String> {
     use crate::network::search_server::SearchMsg;
-    use crate::search::engine::{ResultSource, SearchResult};
+    use crate::search::engine::{ResultSource, ResultType, SearchResult};
 
     let peers = crate::trust::list_trusted_peers(&state.db).await.map_err(|e| e.to_string())?;
     let (device_name, peer_pubkey) = peers
@@ -538,8 +700,9 @@ pub async fn search_remote(
     let mut stream = tokio::net::TcpStream::connect((ip, crate::network::SEARCH_PORT))
         .await
         .map_err(|e| e.to_string())?;
-    let local_id = state.identity.device_id.to_string();
-    let key = crate::network::session_handshake_client(&mut stream, &local_id, &state.identity, &peer_pubkey)
+    let identity = state.identity.read().await;
+    let local_id = identity.device_id.to_string();
+    let key = crate::network::session_handshake_client(&mut stream, &local_id, &identity, &peer_pubkey)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -563,6 +726,8 @@ pub async fn search_remote(
         .map(|r| SearchResult {
             name: r.name,
             path: r.path,
+            exec: None,
+            result_type: ResultType::File,
             source: ResultSource::Remote { device_name: device_name.clone() },
             score: r.score,
         })

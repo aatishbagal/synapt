@@ -9,6 +9,44 @@ import { PairingDialog } from '../components/PairingDialog';
 import { SearchBar } from '../components/SearchBar';
 import { ResultList } from '../components/ResultList';
 import { Peer, ParsedInput, SearchResult, TrustedPeer } from '../types';
+import { useTheme } from '../hooks/useTheme';
+
+const THEME_ORDER = ['dark', 'light', 'system'] as const;
+
+/** Inline 16x16 icon for the active theme: sun, moon, or monitor. */
+function ThemeIcon({ theme }: { theme: string }) {
+  const common = {
+    width: 16,
+    height: 16,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
+  if (theme === 'light') {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+      </svg>
+    );
+  }
+  if (theme === 'system') {
+    return (
+      <svg {...common}>
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <path d="M8 21h8M12 17v4" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  );
+}
 
 interface IncomingPair {
   device_id: string;
@@ -33,7 +71,24 @@ export const Overlay: React.FC = () => {
   const [dragOver, setDragOver] = useState(false);
   const [noIndexedDirs, setNoIndexedDirs] = useState(false);
 
+  const [theme, setTheme] = useState<string>(() => localStorage.getItem('synapt-theme') ?? 'dark');
+  const [themeHover, setThemeHover] = useState(false);
+  const { apply: applyTheme } = useTheme();
+
   const nav = useNavigate();
+
+  useEffect(() => {
+    invoke<string | null>('get_setting', { key: 'theme' })
+      .then(t => setTheme(t ?? 'dark'))
+      .catch(() => undefined);
+  }, []);
+
+  const cycleTheme = async () => {
+    const next = THEME_ORDER[(THEME_ORDER.indexOf(theme as (typeof THEME_ORDER)[number]) + 1) % THEME_ORDER.length];
+    setTheme(next);
+    applyTheme(next);
+    await invoke('set_setting', { key: 'theme', value: next }).catch(() => undefined);
+  };
 
   useEffect(() => {
     const poll = async () => {
@@ -117,7 +172,12 @@ export const Overlay: React.FC = () => {
   }, [parsedInput, nav]);
 
   const openSelected = (result: SearchResult) => {
-    invoke('open_file_path', { path: result.path }).catch(() => {});
+    if (result.result_type === 'App') {
+      invoke('launch_app', { exec: result.exec }).catch(() => {});
+    } else {
+      invoke('open_file_path', { path: result.path }).catch(() => {});
+    }
+    invoke('hide_window').catch(() => {});
   };
 
   const sendPaths = (paths: string[]) => {
@@ -222,15 +282,28 @@ export const Overlay: React.FC = () => {
           />
           <span className="text-xs font-medium">Synapt</span>
         </div>
-        <button
-          type="button"
-          onClick={() => nav('/settings')}
-          title="Settings"
-          className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors"
-          style={{ color: 'var(--muted)' }}
-        >
-          <SettingsIcon size={12} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => nav('/settings')}
+            title="Settings"
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors"
+            style={{ color: 'var(--muted)' }}
+          >
+            <SettingsIcon size={12} />
+          </button>
+          <button
+            type="button"
+            onClick={cycleTheme}
+            title="Toggle theme"
+            onMouseEnter={() => setThemeHover(true)}
+            onMouseLeave={() => setThemeHover(false)}
+            className="flex items-center px-2 py-1 rounded transition-colors"
+            style={{ color: themeHover ? 'var(--text)' : 'var(--muted)' }}
+          >
+            <ThemeIcon theme={theme} />
+          </button>
+        </div>
       </div>
 
       <SearchBar

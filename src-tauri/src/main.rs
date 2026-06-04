@@ -7,13 +7,18 @@ mod storage;
 mod platform;
 mod search;
 mod share;
+mod notify;
+mod ipc;
 
 use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::OnceLock;
+use tauri::AppHandle;
 use tauri::Emitter;
 use tauri::Manager;
 use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use crate::network::PeerMap;
 use crate::network::TransferQueue;
 use crate::trust::LocalIdentity;
@@ -24,9 +29,17 @@ use crate::search::engine::SearchEngine;
 /// All live runtime state shared across Tauri commands.
 pub struct AppState {
     pub db:           Arc<Db>,
-    pub identity:     Arc<LocalIdentity>,
+    /// Local identity, behind a lock so the device name can be changed at runtime.
+    pub identity:     Arc<RwLock<LocalIdentity>>,
     pub peer_map:     PeerMap,
     pub trusted_ids:  Arc<std::sync::Mutex<HashSet<String>>>,
+    /// Device name shared with the discovery thread so renames take effect live.
+    pub discovery_name: Arc<std::sync::Mutex<String>>,
+    /// Set to force the discovery thread to emit a presence packet immediately.
+    pub rebroadcast:  Arc<AtomicBool>,
+    /// When true, the overlay does not auto-hide on focus loss (e.g. while a
+    /// native folder picker, which steals focus, is open).
+    pub suppress_hide: Arc<AtomicBool>,
     /// Channel sender for accepting/rejecting incoming pair requests.
     pub pair_tx:      Arc<Mutex<Option<tokio::sync::oneshot::Sender<bool>>>>,
     /// Pending outbound pairing (initiator side, waiting for user confirmation).
@@ -56,10 +69,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         trusted_rows.iter().map(|r| r.device_id.clone()).collect::<HashSet<_>>(),
     ));
 
+    let discovery_name = Arc::new(std::sync::Mutex::new(identity.device_name.clone()));
+    let rebroadcast = Arc::new(AtomicBool::new(false));
+    // The AppHandle does not exist until setup() runs, so discovery receives a
+    // deferred handle it reads once available (to notify on trusted peers coming online).
+    let discovery_app_handle: Arc<OnceLock<AppHandle>> = Arc::new(OnceLock::new());
     let peer_map = network::start_discovery(
         identity.device_id,
-        identity.device_name.clone(),
+        Arc::clone(&discovery_name),
         Arc::clone(&trusted_ids),
+        Arc::clone(&rebroadcast),
+        Arc::clone(&db),
+        Arc::clone(&discovery_app_handle),
     )?;
 
     let pair_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<bool>>>> = Arc::new(Mutex::new(None));
@@ -82,11 +103,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .flatten()
         .unwrap_or_else(|| "ctrl+space".to_string());
 
+    // The background network servers hold an immutable Arc<LocalIdentity>; the
+    // commands layer holds a separate lockable copy whose device name can change.
+    let identity_lock = Arc::new(RwLock::new((*identity).clone()));
+
+    let suppress_hide = Arc::new(AtomicBool::new(false));
+
     let state = AppState {
         db:            Arc::clone(&db),
-        identity:      Arc::clone(&identity),
+        identity:      Arc::clone(&identity_lock),
         peer_map,
         trusted_ids:   Arc::clone(&trusted_ids),
+        discovery_name: Arc::clone(&discovery_name),
+        rebroadcast:   Arc::clone(&rebroadcast),
+        suppress_hide: Arc::clone(&suppress_hide),
         pair_tx:       Arc::clone(&pair_tx),
         pending_pair:  Arc::clone(&pending_pair),
         file_index:    Arc::clone(&file_index),
@@ -97,9 +127,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(state)
         .setup(move |app| {
             platform::setup_current();
+
+            // Hand the discovery thread a live AppHandle for presence notifications.
+            let _ = discovery_app_handle.set(app.handle().clone());
 
             // macOS: hide the Dock icon (tray-only app).
             #[cfg(target_os = "macos")]
@@ -108,6 +143,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Shared system tray: become the host (owns the single icon) or attach
             // as a client to an already-running Synapt/SynaptClip host.
             share::start(app);
+
+            // Dismiss the overlay when it loses focus (click-away to hide), matching
+            // SynaptClip. Suppressed while a native folder picker is open, since that
+            // dialog steals focus and would otherwise hide the Settings page under it.
+            if let Some(window) = app.get_webview_window("main") {
+                let w = window.clone();
+                let suppress = Arc::clone(&suppress_hide);
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::Focused(false) = event {
+                        if !suppress.load(std::sync::atomic::Ordering::Relaxed) {
+                            let _ = w.hide();
+                        }
+                    }
+                });
+            }
 
             // Global hotkey to toggle the overlay.
             // Linux X11 uses XGrabKey; Wayland uses the inhibitor protocol and may
@@ -164,6 +214,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tokio::spawn(async move {
                 if let Err(e) = network::start_search_server(id_s, db_s, se_s).await {
                     tracing::error!("search server error: {}", e);
+                }
+            });
+
+            // Local IPC server for SynaptClip integration (stub in v0.4).
+            tokio::spawn(async move {
+                crate::ipc::server::start().await;
+            });
+
+            // Installed-application scan, independent of the file index.
+            let db_for_apps = Arc::clone(&db);
+            tokio::spawn(async move {
+                if let Err(e) = search::app_indexer::run_app_scan(&db_for_apps).await {
+                    tracing::warn!("app scan failed: {}", e);
                 }
             });
 
@@ -227,6 +290,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::remove_shared_dir,
             commands::get_setting,
             commands::set_setting,
+            commands::get_all_settings,
+            commands::get_indexed_dir_stats,
+            commands::set_device_name,
+            commands::get_local_identity,
+            commands::open_dir_picker,
+            commands::set_autostart,
+            commands::get_autostart,
+            commands::get_ipc_status,
             commands::set_hotkey,
             commands::request_file_cmd,
             commands::request_files_cmd,
@@ -242,6 +313,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::search_remote,
             commands::evaluate_expr,
             commands::open_file_path,
+            commands::launch_app,
+            commands::trigger_app_scan,
             commands::hide_window,
         ])
         .run(tauri::generate_context!())?;

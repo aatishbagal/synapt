@@ -89,7 +89,7 @@ export const SearchBar: React.FC<Props> = ({ onInput, onArrowDown, onEscape }) =
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        placeholder="Search files, @device, /folder, or calculate..."
+        placeholder="Search files, apps, @device, /folder, or calculate..."
         className="flex-1 bg-transparent text-sm outline-none"
         style={{ color: 'var(--text)' }}
       />

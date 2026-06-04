@@ -70,6 +70,12 @@ cargo tauri build
 
 GNOME does not support system trays by default. Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/) GNOME Shell extension.
 
+### GNOME Wayland — global hotkey
+
+The global hotkey (Ctrl+Space) does not fire under GNOME on Wayland. The shortcut registers without error, but GNOME's Wayland compositor does not deliver globally-grabbed key combinations to applications, so the keypress never reaches Synapt. This is a limitation of the underlying global-shortcut implementation, not a configuration issue.
+
+Until native Wayland support lands (planned for v0.5, via the XDG Desktop Portal GlobalShortcuts interface), use a **GNOME on Xorg** session, where the hotkey works normally. Pick "GNOME on Xorg" from the gear menu on the GDM login screen. The hotkey also works as expected on Windows, macOS, and X11 Linux sessions.
+
 ## Security
 
 Synapt uses X25519 Elliptic Curve Diffie-Hellman for key exchange, ChaCha20-Poly1305 for all network traffic, and HKDF-SHA256 for key derivation. Device pairing uses a code-verification ceremony to detect man-in-the-middle attacks. Trusted peers can only access directories you explicitly add to the shared list. Trust can be revoked at any time from Settings.

@@ -61,6 +61,17 @@ pub struct FileRow {
     pub is_hidden:     i64,
 }
 
+/// A row in the applications table (a discovered installed application).
+#[derive(Debug, sqlx::FromRow, Clone, serde::Serialize)]
+pub struct AppRow {
+    pub id:          i64,
+    pub name:        String,
+    pub exec:        String,
+    pub icon_path:   Option<String>,
+    pub platform:    String,
+    pub source_path: String,
+}
+
 /// A row in the indexed_dirs table.
 #[derive(Debug, sqlx::FromRow, Clone, serde::Serialize)]
 pub struct IndexedDirRow {
@@ -95,6 +106,16 @@ impl Db {
             .fetch_optional(&self.pool)
             .await?;
         Ok(value)
+    }
+
+    /// Get every setting as a key/value map.
+    pub async fn get_all_settings(
+        &self,
+    ) -> Result<std::collections::HashMap<String, String>, DbError> {
+        let rows = sqlx::query_as::<_, (String, String)>("SELECT key, value FROM settings")
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows.into_iter().collect())
     }
 
     /// Set a setting value.
@@ -163,6 +184,15 @@ impl Db {
         .fetch_optional(&self.pool)
         .await?;
         Ok(row)
+    }
+
+    /// Rename the local device identity row.
+    pub async fn update_local_device_name(&self, name: &str) -> Result<(), DbError> {
+        sqlx::query("UPDATE local_device SET device_name = ? WHERE id = 'self'")
+            .bind(name)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     /// Insert the local device identity (first run only).
@@ -350,6 +380,16 @@ impl Db {
         Ok(rows)
     }
 
+    /// Return indexed directories with their file counts and last-scan times.
+    pub async fn get_indexed_dir_stats(&self) -> Result<Vec<IndexedDirRow>, DbError> {
+        let rows = sqlx::query_as::<_, IndexedDirRow>(
+            "SELECT path, file_count, last_indexed FROM indexed_dirs ORDER BY path ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
     /// Add a directory to the search index set. No-op if already present.
     pub async fn add_indexed_dir(&self, path: &str) -> Result<(), DbError> {
         sqlx::query("INSERT OR IGNORE INTO indexed_dirs (path) VALUES (?)")
@@ -422,6 +462,52 @@ impl Db {
         .fetch_all(&self.pool)
         .await?;
         Ok(rows)
+    }
+
+    /// Insert or replace a discovered application, keyed on its unique source path.
+    pub async fn upsert_app(&self, row: &AppRow) -> Result<(), DbError> {
+        sqlx::query(
+            "INSERT OR REPLACE INTO applications \
+               (name, exec, icon_path, platform, source_path) \
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(&row.name)
+        .bind(&row.exec)
+        .bind(&row.icon_path)
+        .bind(&row.platform)
+        .bind(&row.source_path)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Return every indexed application ordered by name.
+    pub async fn get_all_apps(&self) -> Result<Vec<AppRow>, DbError> {
+        let rows = sqlx::query_as::<_, AppRow>(
+            "SELECT id, name, exec, icon_path, platform, source_path \
+             FROM applications ORDER BY name ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Substring search over indexed application names, capped at 20 results.
+    pub async fn search_apps_by_name(&self, query: &str) -> Result<Vec<AppRow>, DbError> {
+        let rows = sqlx::query_as::<_, AppRow>(
+            "SELECT id, name, exec, icon_path, platform, source_path \
+             FROM applications WHERE name LIKE ? ORDER BY name ASC LIMIT 20",
+        )
+        .bind(format!("%{}%", query))
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Remove all indexed applications (called before a fresh app scan).
+    pub async fn clear_apps(&self) -> Result<(), DbError> {
+        sqlx::query("DELETE FROM applications").execute(&self.pool).await?;
+        Ok(())
     }
 
     /// Open an in-memory database with migrations applied, for tests only.

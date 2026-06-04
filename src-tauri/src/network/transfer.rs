@@ -260,6 +260,9 @@ async fn recv_pushed_file(
                 "peer_name": peer_name,
             }),
         );
+        if crate::notify::enabled(db).await {
+            crate::notify::transfer_complete(app, &safe_name, &peer_name);
+        }
         Ok(())
     } else {
         tracing::warn!("pushed file checksum mismatch for {}", safe_name);
@@ -550,6 +553,9 @@ pub async fn request_transfer(
                 "peer_name": peer_name,
             }),
         );
+        if crate::notify::enabled(db).await {
+            crate::notify::transfer_complete(app, &filename, peer_name);
+        }
         Ok(local_path)
     } else {
         tracing::warn!("transfer checksum mismatch for {}", filename);

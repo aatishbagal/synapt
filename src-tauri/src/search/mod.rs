@@ -1,3 +1,4 @@
+pub mod app_indexer;
 pub mod indexer;
 pub mod trie;
 pub mod bloom;

@@ -43,11 +43,15 @@ export interface ParsedInput {
   deviceName: string | null;
 }
 
-export type ResultSource = 'Local' | { Remote: { device_name: string } };
+export type ResultSource = 'LocalFile' | 'LocalApp' | { Remote: { device_name: string } };
+
+export type ResultType = 'File' | 'App';
 
 export interface SearchResult {
   name: string;
   path: string;
+  exec: string | null;
+  result_type: ResultType;
   source: ResultSource;
   score: number;
 }
