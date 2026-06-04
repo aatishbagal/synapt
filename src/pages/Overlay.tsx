@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -11,6 +11,7 @@ import { ResultList } from '../components/ResultList';
 import { IndexingBanner } from '../components/IndexingBanner';
 import { Peer, ParsedInput, SearchResult, TrustedPeer } from '../types';
 import { useTheme } from '../hooks/useTheme';
+import { stepDown, stepUp } from '../utils/navigation';
 
 interface IncomingPair {
   device_id: string;
@@ -27,9 +28,12 @@ export const Overlay: React.FC = () => {
 
   const [parsedInput, setParsedInput] = useState<ParsedInput>(EMPTY_INPUT);
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  // -1 means nothing is highlighted yet; navigation begins highlighting at 0.
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedPeerForSend, setSelectedPeerForSend] = useState<Peer | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -79,8 +83,10 @@ export const Overlay: React.FC = () => {
     };
   }, []);
 
+  // Reset to -1 (nothing highlighted) whenever the result set changes, so no
+  // item appears selected until the user starts navigating.
   useEffect(() => {
-    setSelectedIndex(0);
+    setSelectedIndex(-1);
   }, [results]);
 
   useEffect(() => {
@@ -184,18 +190,26 @@ export const Overlay: React.FC = () => {
     if (paths.length > 0) sendPaths(paths);
   };
 
+  // Keyboard navigation is driven from the search input (which retains focus
+  // throughout) so the user can keep refining the query while browsing results.
+  const handleArrowDown = () => {
+    setSelectedIndex(i => stepDown(i, results.length));
+  };
+
+  const handleArrowUp = () => {
+    setSelectedIndex(i => stepUp(i));
+    // Moving above the first item returns focus to the search input. The input
+    // already holds focus during navigation; this is a harmless safeguard.
+    searchInputRef.current?.focus();
+  };
+
+  const handleEnter = () => {
+    const result = results[selectedIndex];
+    if (selectedIndex >= 0 && result) openSelected(result);
+  };
+
   const handleRootKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setSelectedIndex(i => Math.min(i + 1, results.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSelectedIndex(i => Math.max(i - 1, 0));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const result = results[selectedIndex];
-      if (result) openSelected(result);
-    } else if (e.key === 'Escape') {
+    if (e.key === 'Escape') {
       e.preventDefault();
       if (selectedPeerForSend) {
         setSelectedPeerForSend(null);
@@ -255,8 +269,11 @@ export const Overlay: React.FC = () => {
       </div>
 
       <SearchBar
+        inputRef={searchInputRef}
         onInput={setParsedInput}
-        onArrowDown={() => results.length > 0 && setSelectedIndex(0)}
+        onArrowDown={handleArrowDown}
+        onArrowUp={handleArrowUp}
+        onEnter={handleEnter}
         onEscape={() => invoke('hide_window').catch(() => {})}
       />
 

@@ -1,12 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { InputMode, ParsedInput } from '../types';
 import { parseInput } from '../utils/parseInput';
 
 interface Props {
+  inputRef: React.RefObject<HTMLInputElement | null>;
   onInput: (parsed: ParsedInput) => void;
   onArrowDown: () => void;
+  onArrowUp: () => void;
+  onEnter: () => void;
   onEscape: () => void;
 }
 
@@ -18,8 +21,14 @@ const MODE_LABELS: Record<InputMode, string> = {
   calc: 'Calc',
 };
 
-export const SearchBar: React.FC<Props> = ({ onInput, onArrowDown, onEscape }) => {
-  const inputRef = useRef<HTMLInputElement>(null);
+export const SearchBar: React.FC<Props> = ({
+  inputRef,
+  onInput,
+  onArrowDown,
+  onArrowUp,
+  onEnter,
+  onEscape,
+}) => {
   const [value, setValue] = useState('');
   const [parsed, setParsed] = useState<ParsedInput>(parseInput(''));
   const [calcResult, setCalcResult] = useState<number | null>(null);
@@ -53,6 +62,12 @@ export const SearchBar: React.FC<Props> = ({ onInput, onArrowDown, onEscape }) =
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       onArrowDown();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      onArrowUp();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      onEnter();
     } else if (e.key === 'Escape') {
       e.preventDefault();
       onEscape();
