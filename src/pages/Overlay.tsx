@@ -1,16 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { Settings as SettingsIcon } from 'lucide-react';
-import { PeerCard } from '../components/PeerCard';
 import { PairingDialog } from '../components/PairingDialog';
 import { SearchBar } from '../components/SearchBar';
 import { ResultList } from '../components/ResultList';
+import { DevicePicker } from '../components/DevicePicker';
 import { IndexingBanner } from '../components/IndexingBanner';
-import { Peer, ParsedInput, SearchResult, TrustedPeer } from '../types';
+import { Peer, SearchResult, TrustedPeer, DeviceOption } from '../types';
 import { useTheme } from '../hooks/useTheme';
+import { parseInput } from '../utils/parseInput';
 import { stepDown, stepUp } from '../utils/navigation';
 
 interface IncomingPair {
@@ -19,29 +19,38 @@ interface IncomingPair {
   verify_code: string;
 }
 
-const EMPTY_INPUT: ParsedInput = { raw: '', mode: 'local', query: '', deviceName: null };
-
 export const Overlay: React.FC = () => {
-  const [peers, setPeers] = useState<Peer[]>([]);
-  const [pairingPeer, setPairingPeer] = useState<Peer | null>(null);
   const [incomingPair, setIncomingPair] = useState<IncomingPair | null>(null);
 
-  const [parsedInput, setParsedInput] = useState<ParsedInput>(EMPTY_INPUT);
+  const [inputValue, setInputValue] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   // -1 means nothing is highlighted yet; navigation begins highlighting at 0.
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
+  const [remoteSearchLoading, setRemoteSearchLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [noIndexedDirs, setNoIndexedDirs] = useState(false);
+
+  const [availableDevices, setAvailableDevices] = useState<DeviceOption[]>([]);
+  const [selectedDevice, setSelectedDevice] = useState<DeviceOption | null>(null);
+  const [showDevicePicker, setShowDevicePicker] = useState(false);
+  const [devicePickerIndex, setDevicePickerIndex] = useState(0);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const [selectedPeerForSend, setSelectedPeerForSend] = useState<Peer | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const [noIndexedDirs, setNoIndexedDirs] = useState(false);
-
   const { apply: applyTheme } = useTheme();
-
   const nav = useNavigate();
+
+  const parsedInput = useMemo(
+    () => parseInput(inputValue, selectedDevice !== null),
+    [inputValue, selectedDevice],
+  );
+
+  const deviceFilter = inputValue.startsWith('@') ? inputValue.slice(1).toLowerCase() : '';
+  const filteredDevices = useMemo(
+    () => availableDevices.filter(d => d.device_name.toLowerCase().startsWith(deviceFilter)),
+    [availableDevices, deviceFilter],
+  );
 
   // Reconcile the theme against the persisted setting on mount (the theme is
   // changed from Settings; the overlay only applies it).
@@ -53,16 +62,29 @@ export const Overlay: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Refresh the @ picker's device list. Presence does not need to be real-time
+  // here, so a 10s poll is sufficient.
   useEffect(() => {
-    const poll = async () => {
-      const result = await invoke<Peer[]>('get_peers').catch(() => []);
-      setPeers(result);
+    const fetchDevices = async () => {
+      const trusted = await invoke<TrustedPeer[]>('get_trusted_peers').catch(() => []);
+      const peers = await invoke<Peer[]>('get_peers').catch(() => []);
+      const online = new Set(peers.map(p => p.device_id));
+      setAvailableDevices(
+        trusted.map(t => ({
+          device_id: t.device_id,
+          device_name: t.device_name,
+          ip: peers.find(p => p.device_id === t.device_id)?.ip ?? '',
+          online: online.has(t.device_id),
+        })),
+      );
     };
-    poll();
-    const id = setInterval(poll, 2000);
+    fetchDevices();
+    const id = setInterval(fetchDevices, 10000);
     return () => clearInterval(id);
   }, []);
 
+  // Responder side of pairing: an incoming request raises the pairing dialog.
+  // Pairing is initiated from Settings; the overlay only responds.
   useEffect(() => {
     const unlisten = listen<IncomingPair>('pair-request', e => setIncomingPair(e.payload));
     return () => {
@@ -73,7 +95,9 @@ export const Overlay: React.FC = () => {
   // Surface a prompt when no directories are configured for indexing, so an
   // empty result list is not mistaken for a broken search.
   useEffect(() => {
-    interface IndexStatus { indexed_dirs_count: number }
+    interface IndexStatus {
+      indexed_dirs_count: number;
+    }
     invoke<IndexStatus>('get_index_status')
       .then(s => setNoIndexedDirs(s.indexed_dirs_count === 0))
       .catch(() => undefined);
@@ -83,26 +107,66 @@ export const Overlay: React.FC = () => {
     };
   }, []);
 
-  // Reset to -1 (nothing highlighted) whenever the result set changes, so no
-  // item appears selected until the user starts navigating.
+  // Reset to -1 (nothing highlighted) whenever the result set changes.
   useEffect(() => {
     setSelectedIndex(-1);
   }, [results]);
 
+  // Open the @ device picker while the input begins with @ and no device is yet
+  // selected. The @settings shortcut still routes to Settings, so it is excluded.
   useEffect(() => {
-    const { mode, query, deviceName } = parsedInput;
+    if (selectedDevice) {
+      setShowDevicePicker(false);
+      return;
+    }
+    if (inputValue.startsWith('@') && inputValue.toLowerCase() !== '@settings') {
+      setShowDevicePicker(true);
+      setDevicePickerIndex(0);
+    } else {
+      setShowDevicePicker(false);
+    }
+  }, [inputValue, selectedDevice]);
 
+  useEffect(() => {
+    // The picker is open: defer searching until a device is chosen.
+    if (showDevicePicker) {
+      return;
+    }
+
+    if (selectedDevice) {
+      const query = parsedInput.query;
+      if (query.length === 0) {
+        setResults([]);
+        setError(null);
+        return;
+      }
+      setError(null);
+      const handle = setTimeout(() => {
+        setRemoteSearchLoading(true);
+        invoke<SearchResult[]>('search_remote', { deviceId: selectedDevice.device_id, query })
+          .then(r => {
+            setResults(r);
+            setRemoteSearchLoading(false);
+          })
+          .catch(e => {
+            setError(String(e));
+            setResults([]);
+            setRemoteSearchLoading(false);
+          });
+      }, 150);
+      return () => clearTimeout(handle);
+    }
+
+    const { mode, query } = parsedInput;
     if (mode === 'settings') {
       nav('/settings');
       return;
     }
-
-    if (mode === 'calc' || query.length === 0) {
+    if (mode === 'calc' || mode === 'remote' || query.length === 0) {
       setResults([]);
       setError(null);
       return;
     }
-
     setError(null);
     const handle = setTimeout(async () => {
       setLoading(true);
@@ -111,19 +175,6 @@ export const Overlay: React.FC = () => {
           setResults(await invoke<SearchResult[]>('search_local', { query }));
         } else if (mode === 'folder') {
           setResults(await invoke<SearchResult[]>('search_local', { query: '/' + query }));
-        } else if (mode === 'remote') {
-          const trusted = await invoke<TrustedPeer[]>('get_trusted_peers').catch(() => []);
-          const match = trusted.find(
-            p => p.device_name.toLowerCase() === (deviceName ?? '').toLowerCase(),
-          );
-          if (!match) {
-            setResults([]);
-            setError('Device not paired — check Settings');
-          } else {
-            setResults(
-              await invoke<SearchResult[]>('search_remote', { deviceId: match.device_id, query }),
-            );
-          }
         }
       } catch (e) {
         setError(String(e));
@@ -132,9 +183,8 @@ export const Overlay: React.FC = () => {
         setLoading(false);
       }
     }, 150);
-
     return () => clearTimeout(handle);
-  }, [parsedInput, nav]);
+  }, [parsedInput, selectedDevice, showDevicePicker, nav]);
 
   const openSelected = (result: SearchResult) => {
     if (result.result_type === 'App') {
@@ -145,51 +195,6 @@ export const Overlay: React.FC = () => {
     invoke('hide_window').catch(() => {});
   };
 
-  const sendPaths = (paths: string[]) => {
-    if (!selectedPeerForSend) {
-      setError('Select a trusted device first');
-      return;
-    }
-    if (paths.length === 0) return;
-    setError(null);
-    invoke('send_files_cmd', {
-      deviceId: selectedPeerForSend.device_id,
-      localPaths: paths,
-    }).catch(err => setError(String(err)));
-  };
-
-  // Tauri v2 delivers dropped-file paths through the webview drag-drop event
-  // (the native handler intercepts before the HTML layer sees them).
-  useEffect(() => {
-    const unlisten = getCurrentWebview().onDragDropEvent(event => {
-      const p = event.payload;
-      if (p.type === 'enter' || p.type === 'over') {
-        setDragOver(true);
-      } else if (p.type === 'leave') {
-        setDragOver(false);
-      } else if (p.type === 'drop') {
-        setDragOver(false);
-        sendPaths(p.paths);
-      }
-    });
-    return () => {
-      unlisten.then(fn => fn());
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPeerForSend]);
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragOver(false);
-    // Fallback for environments where HTML drop exposes file paths directly.
-    const paths: string[] = [];
-    for (let i = 0; i < e.dataTransfer.files.length; i++) {
-      const file = e.dataTransfer.files[i] as unknown as { path?: string };
-      if (file.path) paths.push(file.path);
-    }
-    if (paths.length > 0) sendPaths(paths);
-  };
-
   // Keyboard navigation is driven from the search input (which retains focus
   // throughout) so the user can keep refining the query while browsing results.
   const handleArrowDown = () => {
@@ -198,8 +203,6 @@ export const Overlay: React.FC = () => {
 
   const handleArrowUp = () => {
     setSelectedIndex(i => stepUp(i));
-    // Moving above the first item returns focus to the search input. The input
-    // already holds focus during navigation; this is a harmless safeguard.
     searchInputRef.current?.focus();
   };
 
@@ -208,14 +211,44 @@ export const Overlay: React.FC = () => {
     if (selectedIndex >= 0 && result) openSelected(result);
   };
 
+  const selectDevice = (device: DeviceOption) => {
+    setSelectedDevice(device);
+    setShowDevicePicker(false);
+    setInputValue('');
+    setResults([]);
+    searchInputRef.current?.focus();
+  };
+
+  const clearDevice = (reopenPicker: boolean) => {
+    setSelectedDevice(null);
+    setResults([]);
+    setError(null);
+    setInputValue(reopenPicker ? '@' : '');
+    searchInputRef.current?.focus();
+  };
+
+  const handlePickerArrowDown = () => {
+    setDevicePickerIndex(i => Math.min(i + 1, filteredDevices.length - 1));
+  };
+
+  const handlePickerArrowUp = () => {
+    setDevicePickerIndex(i => Math.max(i - 1, 0));
+  };
+
+  const handlePickerSelect = () => {
+    const device = filteredDevices[devicePickerIndex];
+    if (device) selectDevice(device);
+  };
+
+  const handlePickerClose = () => {
+    setShowDevicePicker(false);
+    setInputValue('');
+  };
+
   const handleRootKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Escape') {
       e.preventDefault();
-      if (selectedPeerForSend) {
-        setSelectedPeerForSend(null);
-      } else {
-        invoke('hide_window').catch(() => {});
-      }
+      invoke('hide_window').catch(() => {});
     }
   };
 
@@ -225,18 +258,11 @@ export const Overlay: React.FC = () => {
     <div
       tabIndex={0}
       onKeyDown={handleRootKeyDown}
-      onDragOver={e => {
-        e.preventDefault();
-        setDragOver(true);
-      }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={handleDrop}
       className="flex flex-col w-screen h-screen overflow-hidden focus:outline-none relative"
       style={{
         backgroundColor: 'var(--bg)',
         color: 'var(--text)',
         borderRadius: '8px',
-        boxShadow: dragOver ? 'inset 0 0 0 2px var(--accent)' : 'none',
       }}
     >
       <div
@@ -268,14 +294,32 @@ export const Overlay: React.FC = () => {
         </div>
       </div>
 
-      <SearchBar
-        inputRef={searchInputRef}
-        onInput={setParsedInput}
-        onArrowDown={handleArrowDown}
-        onArrowUp={handleArrowUp}
-        onEnter={handleEnter}
-        onEscape={() => invoke('hide_window').catch(() => {})}
-      />
+      <div className="relative shrink-0">
+        <SearchBar
+          value={inputValue}
+          onValueChange={setInputValue}
+          inputRef={searchInputRef}
+          selectedDevice={selectedDevice}
+          onClearDevice={clearDevice}
+          showDevicePicker={showDevicePicker}
+          onArrowDown={handleArrowDown}
+          onArrowUp={handleArrowUp}
+          onEnter={handleEnter}
+          onEscape={() => invoke('hide_window').catch(() => {})}
+          onPickerArrowDown={handlePickerArrowDown}
+          onPickerArrowUp={handlePickerArrowUp}
+          onPickerSelect={handlePickerSelect}
+          onPickerClose={handlePickerClose}
+        />
+        {showDevicePicker && (
+          <DevicePicker
+            devices={filteredDevices}
+            selectedIndex={devicePickerIndex}
+            onSelect={selectDevice}
+            onClose={handlePickerClose}
+          />
+        )}
+      </div>
 
       <div className="flex-1 overflow-y-auto">
         {error && (
@@ -283,13 +327,13 @@ export const Overlay: React.FC = () => {
             {error}
           </p>
         )}
-        {loading && (
+        {(loading || remoteSearchLoading) && (
           <p className="text-sm text-center py-6" style={{ color: 'var(--muted)' }}>
             Searching...
           </p>
         )}
-        {!loading && !error && results.length === 0 && hasQuery && parsedInput.mode !== 'calc' && (
-          noIndexedDirs ? (
+        {!loading && !remoteSearchLoading && !error && results.length === 0 && hasQuery && parsedInput.mode !== 'calc' && (
+          noIndexedDirs && !selectedDevice ? (
             <div className="flex-1 flex items-center justify-center py-8">
               <button
                 onClick={() => nav('/settings')}
@@ -316,52 +360,6 @@ export const Overlay: React.FC = () => {
           />
         )}
       </div>
-
-      <div
-        className="shrink-0 overflow-y-auto"
-        style={{
-          borderTop: '1px solid var(--border)',
-          backgroundColor: 'var(--bg)',
-          maxHeight: '14rem',
-        }}
-      >
-        <div className="px-3 pt-2 pb-1">
-          <h2 className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-            Devices
-          </h2>
-        </div>
-        {peers.length === 0 ? (
-          <p className="text-sm text-center py-4" style={{ color: 'var(--muted)' }}>
-            No devices found on local network
-          </p>
-        ) : (
-          peers.map(p => (
-            <PeerCard
-              key={p.device_id}
-              peer={p}
-              onPair={setPairingPeer}
-              onSendFile={setSelectedPeerForSend}
-              selected={selectedPeerForSend?.device_id === p.device_id}
-              onSelect={setSelectedPeerForSend}
-            />
-          ))
-        )}
-        <div className="px-3 py-2">
-          {!selectedPeerForSend ? (
-            <p className="text-xs" style={{ color: 'var(--muted)' }}>
-              Select a trusted device to send files via drag-and-drop
-            </p>
-          ) : (
-            <p className="text-xs" style={{ color: 'var(--accent)' }}>
-              Drop files to send to {selectedPeerForSend.device_name}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {pairingPeer && (
-        <PairingDialog mode="initiator" peer={pairingPeer} onClose={() => setPairingPeer(null)} />
-      )}
 
       {incomingPair && (
         <PairingDialog
