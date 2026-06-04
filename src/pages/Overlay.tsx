@@ -8,6 +8,7 @@ import { PeerCard } from '../components/PeerCard';
 import { PairingDialog } from '../components/PairingDialog';
 import { SearchBar } from '../components/SearchBar';
 import { ResultList } from '../components/ResultList';
+import { IndexingBanner } from '../components/IndexingBanner';
 import { Peer, ParsedInput, SearchResult, TrustedPeer } from '../types';
 import { useTheme } from '../hooks/useTheme';
 
@@ -405,6 +406,8 @@ export const Overlay: React.FC = () => {
           onClose={() => setIncomingPair(null)}
         />
       )}
+
+      <IndexingBanner />
     </div>
   );
 };

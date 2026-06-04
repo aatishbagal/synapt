@@ -485,7 +485,10 @@ pub async fn get_transfer_history(
 
 /// Rescan the indexed directories, prune deleted files, and rebuild the index.
 #[tauri::command]
-pub async fn trigger_reindex(state: tauri::State<'_, crate::AppState>) -> Result<u64, String> {
+pub async fn trigger_reindex(
+    state: tauri::State<'_, crate::AppState>,
+    app: tauri::AppHandle,
+) -> Result<u64, String> {
     let include_hidden = state
         .db
         .get_setting("include_hidden")
@@ -493,22 +496,24 @@ pub async fn trigger_reindex(state: tauri::State<'_, crate::AppState>) -> Result
         .map_err(|e| e.to_string())?
         .map(|v| v == "true")
         .unwrap_or(false);
-    let total = crate::search::indexer::run_full_scan(&state.db, include_hidden)
+    // run_full_scan emits Failed and clears the flag itself on scan error.
+    let total = crate::search::indexer::run_full_scan(&state.db, include_hidden, &app, &state.is_indexing)
         .await
         .map_err(|e| e.to_string())?;
-    crate::search::indexer::prune_deleted(&state.db)
-        .await
-        .map_err(|e| e.to_string())?;
-    state
-        .file_index
-        .rebuild_from_db(&state.db)
-        .await
-        .map_err(|e| e.to_string())?;
+    let rebuilt = async {
+        crate::search::indexer::prune_deleted(&state.db).await.map_err(|e| e.to_string())?;
+        state.file_index.rebuild_from_db(&state.db).await.map_err(|e| e.to_string())?;
+        state.search_engine.rebuild().await.map_err(|e| e.to_string())?;
+        Ok::<(), String>(())
+    }
+    .await;
+    if let Err(e) = rebuilt {
+        crate::search::indexer::finish_err(&app, &state.is_indexing, e.clone());
+        return Err(e);
+    }
     tracing::info!("tantivy: index rebuilt after reindex");
-    state.search_engine.rebuild().await.map_err(|e| e.to_string())?;
-    state
-        .index_ready
-        .store(true, std::sync::atomic::Ordering::Relaxed);
+    state.index_ready.store(true, std::sync::atomic::Ordering::Relaxed);
+    crate::search::indexer::finish_ok(&app, &state.is_indexing, total);
     Ok(total)
 }
 
@@ -525,6 +530,7 @@ pub async fn get_indexed_dirs(
 pub async fn add_indexed_dir(
     path: String,
     state: tauri::State<'_, crate::AppState>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
     let p = std::path::Path::new(&path);
     if !p.is_dir() {
@@ -539,18 +545,21 @@ pub async fn add_indexed_dir(
         .map_err(|e| e.to_string())?
         .map(|v| v == "true")
         .unwrap_or(false);
-    crate::search::indexer::run_full_scan(&state.db, include_hidden)
+    let total = crate::search::indexer::run_full_scan(&state.db, include_hidden, &app, &state.is_indexing)
         .await
         .map_err(|e| e.to_string())?;
-    state
-        .file_index
-        .rebuild_from_db(&state.db)
-        .await
-        .map_err(|e| e.to_string())?;
-    state.search_engine.rebuild().await.map_err(|e| e.to_string())?;
-    state
-        .index_ready
-        .store(true, std::sync::atomic::Ordering::Relaxed);
+    let rebuilt = async {
+        state.file_index.rebuild_from_db(&state.db).await.map_err(|e| e.to_string())?;
+        state.search_engine.rebuild().await.map_err(|e| e.to_string())?;
+        Ok::<(), String>(())
+    }
+    .await;
+    if let Err(e) = rebuilt {
+        crate::search::indexer::finish_err(&app, &state.is_indexing, e.clone());
+        return Err(e);
+    }
+    state.index_ready.store(true, std::sync::atomic::Ordering::Relaxed);
+    crate::search::indexer::finish_ok(&app, &state.is_indexing, total);
     Ok(())
 }
 
@@ -587,6 +596,12 @@ pub async fn get_index_status(
         tantivy_ready: state.index_ready.load(std::sync::atomic::Ordering::Relaxed),
         last_scan,
     })
+}
+
+/// Report whether a file-system scan / index rebuild is currently running.
+#[tauri::command]
+pub async fn get_is_indexing(state: tauri::State<'_, crate::AppState>) -> Result<bool, String> {
+    Ok(state.is_indexing.load(std::sync::atomic::Ordering::Relaxed))
 }
 
 /// Evaluate an inline arithmetic expression.

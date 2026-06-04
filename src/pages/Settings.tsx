@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { ArrowLeft } from 'lucide-react';
-import { TrustedPeer } from '../types';
+import { IndexProgress, TrustedPeer } from '../types';
 import { useTheme } from '../hooks/useTheme';
 import { Select } from '../components/Select';
 
@@ -152,6 +153,8 @@ export const Settings: React.FC = () => {
   const [sharedDirs, setSharedDirs] = useState<string[]>([]);
   const [indexedDirs, setIndexedDirs] = useState<IndexedDir[]>([]);
   const [rescanning, setRescanning] = useState(false);
+  const [indexStatus, setIndexStatus] = useState<string | null>(null);
+  const [indexActive, setIndexActive] = useState(false);
 
   const [hotkey, setHotkey] = useState('ctrl+space');
   const [recording, setRecording] = useState(false);
@@ -198,9 +201,51 @@ export const Settings: React.FC = () => {
       await loadTrusted();
       await loadSharedDirs();
       await loadIndexedDirs();
+      const running = await invoke<boolean>('get_is_indexing').catch(() => false);
+      setIndexActive(running);
+      setIndexStatus(running ? 'Index scan running...' : null);
       setHistory(await invoke<TransferHistory[]>('get_transfer_history').catch(() => []));
     })();
   }, [loadTrusted, loadSharedDirs, loadIndexedDirs]);
+
+  // Reflect live indexing progress in the Indexed Directories status line.
+  useEffect(() => {
+    let clearTimer: ReturnType<typeof setTimeout> | null = null;
+    const truncate = (s: string, n: number) => (s.length > n ? `...${s.slice(-(n - 3))}` : s);
+    const unlisten = listen<IndexProgress>('index-progress', event => {
+      const { phase, current_dir } = event.payload;
+      if (clearTimer) {
+        clearTimeout(clearTimer);
+        clearTimer = null;
+      }
+      switch (phase.type) {
+        case 'Starting':
+        case 'BuildingIndex':
+          setIndexActive(true);
+          setIndexStatus('Index scan running...');
+          break;
+        case 'Scanning':
+          setIndexActive(true);
+          setIndexStatus(`Scanning: ${truncate(current_dir, 40)}`);
+          break;
+        case 'Complete':
+          setIndexActive(false);
+          setIndexStatus(`Last scan: ${phase.total_files.toLocaleString()} files`);
+          void loadIndexedDirs();
+          clearTimer = setTimeout(() => setIndexStatus(null), 5000);
+          break;
+        case 'Failed':
+          setIndexActive(false);
+          setIndexStatus(`Index failed: ${phase.reason}`);
+          clearTimer = setTimeout(() => setIndexStatus(null), 5000);
+          break;
+      }
+    });
+    return () => {
+      unlisten.then(fn => fn()).catch(() => undefined);
+      if (clearTimer) clearTimeout(clearTimer);
+    };
+  }, [loadIndexedDirs]);
 
   // --- Device ---
   const saveDeviceName = async () => {
@@ -466,6 +511,23 @@ export const Settings: React.FC = () => {
                   <button onClick={() => removeIndexedDir(d.path)} className="rounded px-2 py-1 text-xs shrink-0 ml-2 transition-colors" style={dangerButton}>Remove</button>
                 </div>
               ))}
+            </div>
+          )}
+          {indexStatus && (
+            <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
+              {indexActive && (
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: 'var(--accent)',
+                    animation: 'pulse 1.5s infinite',
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+              <p className="text-xs" style={{ color: 'var(--muted)' }}>{indexStatus}</p>
             </div>
           )}
           <p className="text-xs" style={{ color: 'var(--muted)' }}>These directories are indexed for local file search.</p>

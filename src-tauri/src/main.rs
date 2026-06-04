@@ -50,6 +50,8 @@ pub struct AppState {
     pub search_engine: Arc<SearchEngine>,
     /// True once the initial scan and full-text index rebuild have completed.
     pub index_ready: Arc<AtomicBool>,
+    /// True while a file-system scan / index rebuild is in progress.
+    pub is_indexing: Arc<AtomicBool>,
     /// In-memory view of active, queued, and recently completed transfers.
     pub transfer_queue: Arc<TransferQueue>,
 }
@@ -95,6 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let transfer_queue = Arc::new(TransferQueue::new(100));
     let index_ready = Arc::new(AtomicBool::new(false));
+    let is_indexing = Arc::new(AtomicBool::new(false));
 
     let hotkey = db
         .get_setting("hotkey")
@@ -122,6 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         file_index:    Arc::clone(&file_index),
         search_engine: Arc::clone(&search_engine),
         index_ready:   Arc::clone(&index_ready),
+        is_indexing:   Arc::clone(&is_indexing),
         transfer_queue: Arc::clone(&transfer_queue),
     };
 
@@ -235,6 +239,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let fi = Arc::clone(&file_index);
             let se = Arc::clone(&search_engine);
             let ready = Arc::clone(&index_ready);
+            let indexing = Arc::clone(&is_indexing);
             let handle3 = app.handle().clone();
             tokio::spawn(async move {
                 let dir_count = db4.get_indexed_dirs().await.map(|d| d.len()).unwrap_or(0);
@@ -254,24 +259,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .flatten()
                     .map(|v| v == "true")
                     .unwrap_or(false);
-                match search::indexer::run_full_scan(&db4, include_hidden).await {
-                    Ok(_) => {}
+                // run_full_scan raises is_indexing and, on error, emits Failed and
+                // clears the flag itself.
+                let total = match search::indexer::run_full_scan(&db4, include_hidden, &handle3, &indexing).await {
+                    Ok(total) => total,
                     Err(e) => {
                         tracing::error!("index scan error: {}", e);
                         return;
                     }
-                }
+                };
                 if let Err(e) = search::indexer::prune_deleted(&db4).await {
                     tracing::error!("index prune error: {}", e);
                 }
                 match fi.rebuild_from_db(&db4).await {
                     Ok(n) => tracing::info!("tantivy: index rebuilt with {} documents", n),
-                    Err(e) => tracing::error!("full-text index rebuild error: {}", e),
+                    Err(e) => {
+                        tracing::error!("full-text index rebuild error: {}", e);
+                        search::indexer::finish_err(&handle3, &indexing, e.to_string());
+                        return;
+                    }
                 }
                 if let Err(e) = se.rebuild().await {
                     tracing::error!("search engine rebuild error: {}", e);
+                    search::indexer::finish_err(&handle3, &indexing, e.to_string());
+                    return;
                 }
                 ready.store(true, std::sync::atomic::Ordering::Relaxed);
+                search::indexer::finish_ok(&handle3, &indexing, total);
             });
 
             Ok(())
@@ -309,6 +323,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::add_indexed_dir,
             commands::remove_indexed_dir,
             commands::get_index_status,
+            commands::get_is_indexing,
             commands::search_local,
             commands::search_remote,
             commands::evaluate_expr,

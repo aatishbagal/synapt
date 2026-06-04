@@ -384,7 +384,7 @@ mod tests {
         std::fs::write(work.join("quarterly_report.txt"), b"data").unwrap();
 
         db.add_indexed_dir(&work.to_string_lossy()).await.unwrap();
-        let scanned = indexer::run_full_scan(&db, false).await.unwrap();
+        let scanned = indexer::run_full_scan_no_progress(&db, false).await.unwrap();
         assert_eq!(scanned, 1, "scan should index exactly one file");
 
         let idx_dir = std::env::temp_dir().join(format!("synapt_pipe_idx_{}", uuid::Uuid::new_v4()));
