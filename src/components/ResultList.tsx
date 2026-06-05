@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { AppIcon } from './AppIcon';
 import { InlineConfirm } from './InlineConfirm';
 import { DeviceMultiSelect } from './DeviceMultiSelect';
@@ -82,6 +82,14 @@ export const ResultList: React.FC<Props> = ({
   onCloseSendToDevices,
   resultsAreFolders = false,
 }) => {
+  const selectedRowRef = useRef<HTMLDivElement>(null);
+
+  // Keep the keyboard-selected row within the scroll viewport. 'nearest' is a
+  // no-op when the row is already fully visible, so mouse hover never scrolls.
+  useEffect(() => {
+    selectedRowRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [selectedIndex]);
+
   return (
     <div>
       {results.map((result, index) => {
@@ -94,6 +102,7 @@ export const ResultList: React.FC<Props> = ({
         return (
           <React.Fragment key={`${result.path}-${index}`}>
             <div
+              ref={selected ? selectedRowRef : undefined}
               onClick={() => onSelect(result)}
               onMouseEnter={() => onHover(index)}
               className="flex items-center justify-between gap-2 px-3 py-2.5 cursor-pointer transition-colors"

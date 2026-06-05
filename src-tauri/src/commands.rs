@@ -767,7 +767,7 @@ pub async fn search_remote(
     state: tauri::State<'_, crate::AppState>,
 ) -> Result<Vec<crate::search::engine::SearchResult>, String> {
     use crate::network::search_server::SearchMsg;
-    use crate::search::engine::{ResultSource, ResultType, SearchResult};
+    use crate::search::engine::{ResultSource, SearchResult};
 
     let peers = crate::trust::list_trusted_peers(&state.db).await.map_err(|e| e.to_string())?;
     let (device_name, peer_pubkey) = peers
@@ -820,11 +820,14 @@ pub async fn search_remote(
         .map(|r| SearchResult {
             name: r.name,
             path: r.path,
-            exec: None,
-            result_type: ResultType::File,
+            // Preserve the app exec/type and the inlined icon so remote apps
+            // appear (sorted above files, as the engine ranks them) with icons
+            // and can be launched via remote_launch_app.
+            exec: r.exec,
+            result_type: r.result_type,
             source: ResultSource::Remote { device_name: device_name.clone() },
             score: r.score,
-            icon_path: None,
+            icon_path: r.icon_path,
         })
         .collect())
 }

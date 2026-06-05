@@ -8,7 +8,7 @@ use tokio::net::{TcpListener, TcpStream};
 use crate::network::discovery::SEARCH_PORT;
 use crate::network::transfer::is_path_allowed;
 use crate::network::{read_enc, session_handshake_server, write_enc, SessionError};
-use crate::search::engine::{SearchEngine, SearchResult};
+use crate::search::engine::{ResultType, SearchEngine, SearchResult};
 use crate::storage::Db;
 use crate::trust::LocalIdentity;
 
@@ -76,7 +76,17 @@ async fn handle_search_conn(
             let shared_dirs = db.get_shared_dirs().await?;
             let filtered: Vec<SearchResult> = results
                 .into_iter()
-                .filter(|r| is_path_allowed(Path::new(&r.path), &shared_dirs))
+                // File results are gated by the shared-dirs allow-list. App
+                // results are launched (not transferred) and validated again by
+                // remote_launch_app, so they are surfaced to trusted peers.
+                .filter(|r| {
+                    matches!(r.result_type, ResultType::App)
+                        || is_path_allowed(Path::new(&r.path), &shared_dirs)
+                })
+                .map(|mut r| {
+                    embed_app_icon(&mut r);
+                    r
+                })
                 .collect();
 
             let response = SearchMsg::SearchResults { results: filtered };
@@ -92,6 +102,39 @@ async fn handle_search_conn(
         _ => return Ok(()),
     }
     Ok(())
+}
+
+/// Inline an app result's icon as a base64 data URI so a remote peer can render
+/// it without access to this device's filesystem. Files and unsupported or
+/// oversized icons are left untouched (the peer shows a placeholder).
+fn embed_app_icon(result: &mut SearchResult) {
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+    const MAX_ICON_BYTES: u64 = 256 * 1024;
+
+    if !matches!(result.result_type, ResultType::App) {
+        return;
+    }
+    let Some(path) = result.icon_path.clone() else {
+        return;
+    };
+    let lower = path.to_lowercase();
+    let mime = if lower.ends_with(".png") {
+        "image/png"
+    } else if lower.ends_with(".svg") {
+        "image/svg+xml"
+    } else {
+        result.icon_path = None;
+        return;
+    };
+    match std::fs::metadata(&path) {
+        Ok(meta) if meta.len() <= MAX_ICON_BYTES => match std::fs::read(&path) {
+            Ok(bytes) => {
+                result.icon_path = Some(format!("data:{};base64,{}", mime, BASE64.encode(&bytes)));
+            }
+            Err(_) => result.icon_path = None,
+        },
+        _ => result.icon_path = None,
+    }
 }
 
 /// Resolve a remote launch request to the locally-indexed exec string. The

@@ -264,13 +264,127 @@ mod windows {
                     name,
                     // The .lnk path is launched via the shell, which resolves the target.
                     exec: path.to_string_lossy().to_string(),
-                    icon_path: None,
+                    // Extract the shortcut's icon to a PNG cache file; None if it fails.
+                    icon_path: extract_icon(&path),
                     platform: "windows".into(),
                     source_path: path.to_string_lossy().to_string(),
                 });
             }
         }
         Ok(())
+    }
+
+    /// Extract a shortcut's icon, encode it as a PNG, cache it under the user's
+    /// cache directory, and return that path. None if extraction fails.
+    fn extract_icon(path: &std::path::Path) -> Option<String> {
+        use sha2::{Digest, Sha256};
+        let png = icon_png_bytes(path)?;
+        let cache_dir = dirs::cache_dir()?.join("synapt").join("app-icons");
+        std::fs::create_dir_all(&cache_dir).ok()?;
+        let digest = Sha256::digest(path.to_string_lossy().as_bytes());
+        let out = cache_dir.join(format!("{:x}.png", digest));
+        std::fs::write(&out, &png).ok()?;
+        Some(out.to_string_lossy().to_string())
+    }
+
+    /// Load the file's associated large icon via the shell and encode it as PNG
+    /// RGBA bytes. The shell resolves a `.lnk` to its target's icon.
+    fn icon_png_bytes(path: &std::path::Path) -> Option<Vec<u8>> {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::core::PCWSTR;
+        use windows::Win32::UI::Shell::{
+            SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON,
+        };
+        use windows::Win32::UI::WindowsAndMessaging::DestroyIcon;
+
+        let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+        unsafe {
+            let mut shfi = SHFILEINFOW::default();
+            let ok = SHGetFileInfoW(
+                PCWSTR(wide.as_ptr()),
+                Default::default(),
+                Some(&mut shfi),
+                std::mem::size_of::<SHFILEINFOW>() as u32,
+                SHGFI_ICON | SHGFI_LARGEICON,
+            );
+            if ok == 0 || shfi.hIcon.is_invalid() {
+                return None;
+            }
+            let result = hicon_to_png(shfi.hIcon);
+            let _ = DestroyIcon(shfi.hIcon);
+            result
+        }
+    }
+
+    /// Convert an HICON to PNG (RGBA) bytes via its color bitmap.
+    unsafe fn hicon_to_png(
+        hicon: windows::Win32::UI::WindowsAndMessaging::HICON,
+    ) -> Option<Vec<u8>> {
+        use windows::Win32::Graphics::Gdi::{
+            DeleteObject, GetDC, GetDIBits, GetObjectW, ReleaseDC, BITMAP, BITMAPINFO,
+            BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HGDIOBJ,
+        };
+        use windows::Win32::UI::WindowsAndMessaging::{GetIconInfo, ICONINFO};
+
+        let mut info = ICONINFO::default();
+        GetIconInfo(hicon, &mut info).ok()?;
+        let color = info.hbmColor;
+        let mask = info.hbmMask;
+
+        let mut bmp = BITMAP::default();
+        let got = GetObjectW(
+            HGDIOBJ(color.0),
+            std::mem::size_of::<BITMAP>() as i32,
+            Some(&mut bmp as *mut _ as *mut core::ffi::c_void),
+        );
+        let width = bmp.bmWidth;
+        let height = bmp.bmHeight;
+        if got == 0 || width <= 0 || height <= 0 {
+            let _ = DeleteObject(HGDIOBJ(color.0));
+            let _ = DeleteObject(HGDIOBJ(mask.0));
+            return None;
+        }
+
+        let mut bmi = BITMAPINFO::default();
+        bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+        bmi.bmiHeader.biWidth = width;
+        bmi.bmiHeader.biHeight = -height; // top-down rows
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB.0 as u32;
+
+        let mut buf = vec![0u8; (width * height * 4) as usize];
+        let hdc = GetDC(None);
+        let scan = GetDIBits(
+            hdc,
+            color,
+            0,
+            height as u32,
+            Some(buf.as_mut_ptr() as *mut core::ffi::c_void),
+            &mut bmi,
+            DIB_RGB_COLORS,
+        );
+        ReleaseDC(None, hdc);
+        let _ = DeleteObject(HGDIOBJ(color.0));
+        let _ = DeleteObject(HGDIOBJ(mask.0));
+        if scan == 0 {
+            return None;
+        }
+
+        // GetDIBits yields BGRA; PNG wants RGBA.
+        for px in buf.chunks_exact_mut(4) {
+            px.swap(0, 2);
+        }
+
+        let mut out = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut out, width as u32, height as u32);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header().ok()?;
+            writer.write_image_data(&buf).ok()?;
+        }
+        Some(out)
     }
 }
 
