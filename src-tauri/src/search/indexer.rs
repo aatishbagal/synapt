@@ -209,6 +209,24 @@ fn scan_dir<'a>(
             }
             let path = entry.path();
             if file_type.is_dir() {
+                // Index the directory itself (type = 'dir') so folder search can
+                // find it, then recurse for the files inside. Directories are not
+                // counted toward the file-count stat.
+                let parent_path = path
+                    .parent()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let dir_row = FileRow {
+                    name,
+                    path: path.to_string_lossy().to_string(),
+                    parent_path,
+                    file_type: "dir".to_string(),
+                    size: None,
+                    last_modified: None,
+                    extension: None,
+                    is_hidden: if is_hidden { 1 } else { 0 },
+                };
+                db.upsert_file(&dir_row).await?;
                 count += scan_dir(db, &path, include_hidden, progress).await.unwrap_or(0);
             } else if file_type.is_file() {
                 let meta = match entry.metadata().await {
@@ -312,6 +330,26 @@ mod tests {
 
         let count = scan_dir(&db, &dir, false, None).await.unwrap();
         assert_eq!(count, 3);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[tokio::test]
+    async fn scan_dir_indexes_subdirectories_for_folder_search() {
+        // Subdirectories are indexed as type='dir' (and excluded from the file
+        // count) so the folder search mode can find them.
+        let db = Db::open_in_memory().await.unwrap();
+        let dir = temp_dir();
+        let sub = dir.join("Reports");
+        std::fs::create_dir_all(&sub).unwrap();
+        write_file(&sub, "a.txt", 10);
+
+        let count = scan_dir(&db, &dir, false, None).await.unwrap();
+        assert_eq!(count, 1, "only the file is counted, not the directory");
+
+        let dirs = db.search_dirs_by_name("report", 10).await.unwrap();
+        assert_eq!(dirs.len(), 1);
+        assert_eq!(dirs[0].name, "Reports");
+        assert_eq!(dirs[0].file_type, "dir");
         std::fs::remove_dir_all(&dir).ok();
     }
 

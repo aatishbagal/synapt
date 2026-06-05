@@ -190,6 +190,7 @@ mod tests {
 
     #[test]
     fn levenshtein_handles_unicode() {
+        // Intentional Unicode test case (accented e), not an emoji.
         assert_eq!(levenshtein("cafe", "café"), 1);
     }
 

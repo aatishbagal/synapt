@@ -137,6 +137,30 @@ impl SearchEngine {
             return Ok(Vec::new());
         }
 
+        // Folder search: the folder input mode sends a leading '/'. Route it to a
+        // directory-only name search over the indexed directory entries, so it
+        // returns folders rather than files.
+        if let Some(dir_query) = query_trimmed.strip_prefix('/') {
+            let dir_query = dir_query.trim();
+            if dir_query.is_empty() {
+                return Ok(Vec::new());
+            }
+            let rows = self.db.search_dirs_by_name(dir_query, max_results as i64).await?;
+            let results = rows
+                .into_iter()
+                .map(|r| SearchResult {
+                    name: r.name,
+                    path: r.path,
+                    exec: None,
+                    result_type: ResultType::File,
+                    source: ResultSource::LocalFile,
+                    score: 1.0,
+                    icon_path: None,
+                })
+                .collect();
+            return Ok(results);
+        }
+
         // Star syntax: an explicit power-user contains search. A leading and/or
         // trailing '*' routes straight to the wildcard stage, skipping the trie,
         // standard tantivy, and fuzzy stages.

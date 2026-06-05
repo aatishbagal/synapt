@@ -9,7 +9,12 @@ function looksLikeExpression(s: string): boolean {
   return hasDigit && hasOp;
 }
 
-export function parseInput(raw: string): ParsedInput {
+export function parseInput(raw: string, hasSelectedDevice = false): ParsedInput {
+  // Once a device is selected via the @ picker, the device tag owns the target
+  // and every keystroke is a remote query; no prefix detection applies.
+  if (hasSelectedDevice) {
+    return { raw, mode: 'remote', query: raw.trim(), deviceName: null };
+  }
   if (raw.startsWith('/')) {
     return { raw, mode: 'folder', query: raw.slice(1).trim(), deviceName: null };
   }

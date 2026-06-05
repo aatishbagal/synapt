@@ -259,33 +259,73 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .flatten()
                     .map(|v| v == "true")
                     .unwrap_or(false);
-                // run_full_scan raises is_indexing and, on error, emits Failed and
-                // clears the flag itself.
-                let total = match search::indexer::run_full_scan(&db4, include_hidden, &handle3, &indexing).await {
-                    Ok(total) => total,
-                    Err(e) => {
-                        tracing::error!("index scan error: {}", e);
-                        return;
+
+                // Avoid re-walking the filesystem on every launch. Only run a full
+                // scan when the index is empty, was never fully built, or the last
+                // completed scan is stale. A completed scan records
+                // `last_full_index`; an interrupted one does not, so the next launch
+                // rescans rather than trusting a partial index.
+                const STALE_SCAN_SECS: i64 = 24 * 60 * 60;
+                let file_count = db4.count_files().await.unwrap_or(0);
+                let last_full = db4
+                    .get_setting("last_full_index")
+                    .await
+                    .ok()
+                    .flatten()
+                    .and_then(|v| v.parse::<i64>().ok())
+                    .unwrap_or(0);
+                let now = chrono::Utc::now().timestamp();
+                let needs_scan = file_count == 0 || (now - last_full) >= STALE_SCAN_SECS;
+
+                let total = if needs_scan {
+                    // run_full_scan raises is_indexing and, on error, emits Failed
+                    // and clears the flag itself.
+                    let total = match search::indexer::run_full_scan(&db4, include_hidden, &handle3, &indexing).await {
+                        Ok(total) => total,
+                        Err(e) => {
+                            tracing::error!("index scan error: {}", e);
+                            return;
+                        }
+                    };
+                    if let Err(e) = search::indexer::prune_deleted(&db4).await {
+                        tracing::error!("index prune error: {}", e);
                     }
+                    total
+                } else {
+                    tracing::info!(
+                        "index is fresh ({} files, last full scan {}s ago); skipping startup filesystem scan",
+                        file_count,
+                        now - last_full
+                    );
+                    file_count as u64
                 };
-                if let Err(e) = search::indexer::prune_deleted(&db4).await {
-                    tracing::error!("index prune error: {}", e);
-                }
+
+                // Rebuild the in-memory search structures from the persisted DB rows
+                // (cheap relative to a filesystem walk), whether or not a scan ran.
                 match fi.rebuild_from_db(&db4).await {
                     Ok(n) => tracing::info!("tantivy: index rebuilt with {} documents", n),
                     Err(e) => {
                         tracing::error!("full-text index rebuild error: {}", e);
-                        search::indexer::finish_err(&handle3, &indexing, e.to_string());
+                        if needs_scan {
+                            search::indexer::finish_err(&handle3, &indexing, e.to_string());
+                        }
                         return;
                     }
                 }
                 if let Err(e) = se.rebuild().await {
                     tracing::error!("search engine rebuild error: {}", e);
-                    search::indexer::finish_err(&handle3, &indexing, e.to_string());
+                    if needs_scan {
+                        search::indexer::finish_err(&handle3, &indexing, e.to_string());
+                    }
                     return;
                 }
                 ready.store(true, std::sync::atomic::Ordering::Relaxed);
-                search::indexer::finish_ok(&handle3, &indexing, total);
+                if needs_scan {
+                    let _ = db4
+                        .set_setting("last_full_index", &chrono::Utc::now().timestamp().to_string())
+                        .await;
+                    search::indexer::finish_ok(&handle3, &indexing, total);
+                }
             });
 
             Ok(())
@@ -326,9 +366,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::get_is_indexing,
             commands::search_local,
             commands::search_remote,
+            commands::remote_launch_app,
             commands::evaluate_expr,
             commands::open_file_path,
             commands::launch_app,
+            commands::reveal_in_files,
+            commands::dirs_indexed,
             commands::get_app_icon,
             commands::trigger_app_scan,
             commands::hide_window,

@@ -416,6 +416,14 @@ impl Db {
         Ok(count)
     }
 
+    /// Count indexed directory entries (folder search readiness).
+    pub async fn count_dirs(&self) -> Result<i64, DbError> {
+        let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM files WHERE type = 'dir'")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(count)
+    }
+
     /// Most recent last_indexed timestamp across all indexed directories.
     pub async fn get_last_scan(&self) -> Result<Option<i64>, DbError> {
         let ts = sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(last_indexed) FROM indexed_dirs")
@@ -456,6 +464,25 @@ impl Db {
             "SELECT name, path, parent_path, type AS file_type, size, last_modified, \
                     extension, is_hidden \
              FROM files WHERE name LIKE ? LIMIT ?",
+        )
+        .bind(format!("%{}%", query))
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Substring search over indexed directory names (type = 'dir'), for the
+    /// folder search mode. LIKE is case-insensitive for ASCII in SQLite.
+    pub async fn search_dirs_by_name(
+        &self,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<FileRow>, DbError> {
+        let rows = sqlx::query_as::<_, FileRow>(
+            "SELECT name, path, parent_path, type AS file_type, size, last_modified, \
+                    extension, is_hidden \
+             FROM files WHERE type = 'dir' AND name LIKE ? ORDER BY name ASC LIMIT ?",
         )
         .bind(format!("%{}%", query))
         .bind(limit)
@@ -508,6 +535,20 @@ impl Db {
     pub async fn clear_apps(&self) -> Result<(), DbError> {
         sqlx::query("DELETE FROM applications").execute(&self.pool).await?;
         Ok(())
+    }
+
+    /// Look up the indexed exec string for an application by its source path.
+    /// Used to validate remote launch requests against the local app index.
+    pub async fn app_exec_by_source_path(
+        &self,
+        source_path: &str,
+    ) -> Result<Option<String>, DbError> {
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT exec FROM applications WHERE source_path = ?")
+                .bind(source_path)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row.map(|r| r.0))
     }
 
     /// Open an in-memory database with migrations applied, for tests only.

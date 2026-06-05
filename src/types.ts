@@ -17,6 +17,14 @@ export interface TrustedPeer {
   last_seen: number | null;
 }
 
+/** A trusted device offered in the @ device picker, with live online status. */
+export interface DeviceOption {
+  device_id: string;
+  device_name: string;
+  ip: string;
+  online: boolean;
+}
+
 export interface TransferProgress {
   filename: string;
   bytes_received: number;

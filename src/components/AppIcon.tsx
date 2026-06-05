@@ -19,6 +19,12 @@ export const AppIcon: React.FC<Props> = ({ iconPath, size = 20 }) => {
       setSrc(null);
       return;
     }
+    // Remote results carry the icon inline as a data URI (the file lives on the
+    // other device); render it directly rather than reading a local path.
+    if (iconPath.startsWith('data:')) {
+      setSrc(iconPath);
+      return;
+    }
     let active = true;
     invoke<string>('get_app_icon', { iconPath })
       .then(result => {

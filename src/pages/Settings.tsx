@@ -32,7 +32,7 @@ interface TransferHistory {
   completed_at: number | null;
 }
 
-const APP_VERSION = '0.4.0';
+const APP_VERSION = '0.4.2';
 const REPO_URL = 'https://github.com/aatishbagal/synapt';
 
 const inputStyle: React.CSSProperties = {
@@ -75,19 +75,6 @@ function relativeDate(unixSeconds: number | null): string {
   return `${Math.floor(diff / day)}d ago`;
 }
 
-function formatBytes(n: number | null): string {
-  if (n === null) return '—';
-  if (n < 1024) return `${n} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  let value = n / 1024;
-  let i = 0;
-  while (value >= 1024 && i < units.length - 1) {
-    value /= 1024;
-    i += 1;
-  }
-  return `${value.toFixed(1)} ${units[i]}`;
-}
-
 /** Title-case a stored hotkey string such as `ctrl+space` for display. */
 function prettyHotkey(hotkey: string): string {
   return hotkey
@@ -121,24 +108,6 @@ function keyLabel(code: string): string {
     case 'Backslash': return '\\';
     case 'Backquote': return '`';
     default: return code;
-  }
-}
-
-function statusBadgeStyle(status: string): React.CSSProperties {
-  const base: React.CSSProperties = { backgroundColor: 'var(--surface-hover)' };
-  switch (status.toLowerCase()) {
-    case 'complete':
-    case 'completed':
-      return { ...base, color: 'var(--success)', border: '1px solid var(--border)' };
-    case 'failed':
-      return { ...base, color: 'var(--danger)', border: '1px solid var(--border)' };
-    case 'partial':
-      return { ...base, color: 'var(--warning)', border: '1px solid var(--border)' };
-    case 'in_progress':
-    case 'inprogress':
-      return { ...base, color: 'var(--accent)', border: '1px solid var(--accent)' };
-    default:
-      return { ...base, color: 'var(--muted)', border: '1px solid var(--border)' };
   }
 }
 
@@ -380,11 +349,6 @@ export const Settings: React.FC = () => {
     await invoke('set_setting', { key: 'theme', value }).catch(() => undefined);
   };
 
-  const peerName = (deviceId: string): string => {
-    const match = trusted.find(p => p.device_id === deviceId);
-    return match ? match.device_name : deviceId.slice(0, 12);
-  };
-
   return (
     <div
       className="flex flex-col w-screen h-screen overflow-hidden"
@@ -613,25 +577,18 @@ export const Settings: React.FC = () => {
         </Section>
 
         {/* 7. Transfer History */}
-        <Section title="Transfer History">
-          {history.length === 0 ? (
-            <p className="text-xs" style={{ color: 'var(--muted)' }}>No transfers yet.</p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {history.map((t, i) => (
-                <div key={`${t.filename}-${t.started_at}-${i}`} className="flex items-center justify-between px-3 py-2" style={itemCard}>
-                  <div className="min-w-0">
-                    <p className="text-[13px]" style={{ color: 'var(--text)' }}>{t.filename}</p>
-                    <p className="text-xs" style={{ color: 'var(--muted)' }}>{peerName(t.peer_device_id)}</p>
-                  </div>
-                  <div className="text-right shrink-0 ml-2">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={statusBadgeStyle(t.status)}>{t.status}</span>
-                    <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{formatBytes(t.size)} · {relativeDate(t.started_at)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        <Section title="Transfers">
+          <button
+            type="button"
+            onClick={() => nav('/transfers')}
+            className="flex items-center justify-between px-3 py-2 w-full text-left"
+            style={itemCard}
+          >
+            <span className="text-[13px]" style={{ color: 'var(--text)' }}>Transfer history</span>
+            <span className="text-xs" style={{ color: 'var(--muted)' }}>
+              {history.length} {history.length === 1 ? 'transfer' : 'transfers'} &rsaquo;
+            </span>
+          </button>
         </Section>
 
         {/* 8. About */}
