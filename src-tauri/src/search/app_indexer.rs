@@ -291,11 +291,11 @@ mod windows {
     /// RGBA bytes. The shell resolves a `.lnk` to its target's icon.
     fn icon_png_bytes(path: &std::path::Path) -> Option<Vec<u8>> {
         use std::os::windows::ffi::OsStrExt;
-        use windows::core::PCWSTR;
-        use windows::Win32::UI::Shell::{
+        use ::windows::core::PCWSTR;
+        use ::windows::Win32::UI::Shell::{
             SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON,
         };
-        use windows::Win32::UI::WindowsAndMessaging::DestroyIcon;
+        use ::windows::Win32::UI::WindowsAndMessaging::DestroyIcon;
 
         let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
         unsafe {
@@ -303,11 +303,11 @@ mod windows {
             let ok = SHGetFileInfoW(
                 PCWSTR(wide.as_ptr()),
                 Default::default(),
-                Some(&mut shfi),
+                Some(&mut shfi as *mut _),
                 std::mem::size_of::<SHFILEINFOW>() as u32,
                 SHGFI_ICON | SHGFI_LARGEICON,
             );
-            if ok == 0 || shfi.hIcon.is_invalid() {
+            if ok == 0 || shfi.hIcon.0.is_null() {
                 return None;
             }
             let result = hicon_to_png(shfi.hIcon);
@@ -318,13 +318,13 @@ mod windows {
 
     /// Convert an HICON to PNG (RGBA) bytes via its color bitmap.
     unsafe fn hicon_to_png(
-        hicon: windows::Win32::UI::WindowsAndMessaging::HICON,
+        hicon: ::windows::Win32::UI::WindowsAndMessaging::HICON,
     ) -> Option<Vec<u8>> {
-        use windows::Win32::Graphics::Gdi::{
+        use ::windows::Win32::Graphics::Gdi::{
             DeleteObject, GetDC, GetDIBits, GetObjectW, ReleaseDC, BITMAP, BITMAPINFO,
             BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HGDIOBJ,
         };
-        use windows::Win32::UI::WindowsAndMessaging::{GetIconInfo, ICONINFO};
+        use ::windows::Win32::UI::WindowsAndMessaging::{GetIconInfo, ICONINFO};
 
         let mut info = ICONINFO::default();
         GetIconInfo(hicon, &mut info).ok()?;
