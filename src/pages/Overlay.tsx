@@ -525,39 +525,26 @@ export const Overlay: React.FC = () => {
           !remoteSearchLoading &&
           !error &&
           results.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full px-6">
-              <div className="flex flex-col gap-2.5" style={{ width: '100%', maxWidth: '300px' }}>
-                <p
-                  className="text-[11px] uppercase tracking-wider mb-1"
-                  style={{ color: 'var(--muted)' }}
-                >
-                  Try searching
+            <div className="flex flex-col items-center justify-center h-full px-6 text-center">
+              <p className="text-sm font-medium mb-3" style={{ color: 'var(--text)' }}>
+                Try searching
+              </p>
+              <div className="flex flex-col gap-1.5">
+                <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                  Type to search files and apps
                 </p>
-                {[
-                  { k: 'abc', d: 'Search files and apps' },
-                  { k: '/', d: 'Find folders, e.g. /Documents' },
-                  { k: '@', d: 'Search a paired device, e.g. @laptop' },
-                  { k: '1+2', d: 'Calculate, e.g. 45 * 12' },
-                ].map(tip => (
-                  <div key={tip.k} className="flex items-center gap-3">
-                    <span
-                      className="flex items-center justify-center shrink-0 text-xs"
-                      style={{
-                        width: '38px',
-                        height: '22px',
-                        borderRadius: '4px',
-                        backgroundColor: 'var(--surface)',
-                        border: '1px solid var(--border)',
-                        color: 'var(--accent)',
-                      }}
-                    >
-                      {tip.k}
-                    </span>
-                    <span className="text-xs" style={{ color: 'var(--muted)' }}>
-                      {tip.d}
-                    </span>
-                  </div>
-                ))}
+                <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                  <span style={{ color: 'var(--accent)' }}>/</span> to find folders
+                </p>
+                <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                  <span style={{ color: 'var(--accent)' }}>@</span> to search a paired device
+                </p>
+                <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                  <span style={{ color: 'var(--accent)' }}>Right arrow</span> on a file for actions
+                </p>
+                <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                  Type a calculation like 45 * 12
+                </p>
               </div>
             </div>
           )}

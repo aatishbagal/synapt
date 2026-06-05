@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { Overlay } from './pages/Overlay';
 import { Settings } from './pages/Settings';
+import { TransferHistory } from './pages/TransferHistory';
 import { useTheme } from './hooks/useTheme';
 import './index.css';
 
@@ -23,6 +24,7 @@ const Root: React.FC = () => {
       <Routes>
         <Route path="/" element={<Overlay />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/transfers" element={<TransferHistory />} />
       </Routes>
     </HashRouter>
   );

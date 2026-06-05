@@ -525,6 +525,10 @@ pub async fn trigger_reindex(
     }
     tracing::info!("tantivy: index rebuilt after reindex");
     state.index_ready.store(true, std::sync::atomic::Ordering::Relaxed);
+    let _ = state
+        .db
+        .set_setting("last_full_index", &chrono::Utc::now().timestamp().to_string())
+        .await;
     crate::search::indexer::finish_ok(&app, &state.is_indexing, total);
     Ok(total)
 }
