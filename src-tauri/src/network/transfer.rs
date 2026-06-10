@@ -263,6 +263,17 @@ async fn recv_pushed_file(
         if crate::notify::enabled(db).await {
             crate::notify::transfer_complete(app, &safe_name, &peer_name);
         }
+        // If this file is a SynaptClip clip (synapt-clips/<uuid>.txt), forward its
+        // contents to the local SynaptClip instead of leaving it on disk silently.
+        if crate::ipc::webhook::is_synaptclip_clip(&local_path) {
+            if let Ok(content) = tokio::fs::read_to_string(&local_path).await {
+                let sender_id = peer_device_id.to_string();
+                let sender_name = peer_name.clone();
+                tokio::spawn(async move {
+                    crate::ipc::webhook::deliver_clip(&sender_id, &sender_name, &content).await;
+                });
+            }
+        }
         Ok(())
     } else {
         tracing::warn!("pushed file checksum mismatch for {}", safe_name);

@@ -1,3 +1,4 @@
-//! Local HTTP IPC surface for SynaptClip integration. v0.4 ships only the
-//! health endpoint; peers and clip-send endpoints arrive in v0.5.
+//! Local HTTP IPC surface for SynaptClip integration: the loopback server
+//! (health, peers, clip send) and the outbound clip-delivery webhook.
 pub mod server;
+pub mod webhook;
