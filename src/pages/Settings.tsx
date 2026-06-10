@@ -166,7 +166,7 @@ export const Settings: React.FC = () => {
       applyTheme(t);
 
       setAutostart(await invoke<boolean>('get_autostart').catch(() => false));
-      setIpcActive(await invoke<boolean>('get_ipc_status').catch(() => false));
+      setIpcActive((await invoke<{ active: boolean; peer_count: number }>('get_ipc_status').catch(() => ({ active: false, peer_count: 0 }))).active);
 
       await loadTrusted();
       await loadSharedDirs();

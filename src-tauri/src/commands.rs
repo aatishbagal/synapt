@@ -277,17 +277,45 @@ pub async fn get_autostart() -> Result<bool, String> {
     crate::platform::autostart::is_enabled().map_err(|e| e.to_string())
 }
 
-/// Probe the local IPC server's health endpoint; true when it responds 200.
+/// Reachability of the local IPC server plus the number of peers it lists.
+#[derive(serde::Serialize)]
+pub struct IpcStatus {
+    /// True when GET /v1/health responds 200.
+    pub active: bool,
+    /// Online peers reported by GET /v1/peers (0 when unreachable).
+    pub peer_count: usize,
+}
+
+/// Probe the local IPC server: confirm /v1/health responds and read the peer count
+/// from /v1/peers. Used by the Settings page.
 #[tauri::command]
-pub async fn get_ipc_status() -> Result<bool, String> {
+pub async fn get_ipc_status() -> Result<IpcStatus, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(1))
         .build()
         .map_err(|e| e.to_string())?;
-    match client.get("http://127.0.0.1:57321/v1/health").send().await {
-        Ok(resp) => Ok(resp.status().is_success()),
-        Err(_) => Ok(false),
-    }
+
+    let active = match client.get("http://127.0.0.1:57321/v1/health").send().await {
+        Ok(resp) => resp.status().is_success(),
+        Err(_) => false,
+    };
+
+    let peer_count = match client.get("http://127.0.0.1:57321/v1/peers").send().await {
+        Ok(resp) => {
+            let body = resp.text().await.unwrap_or_default();
+            serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| {
+                    v.get("peers")
+                        .and_then(|p| p.as_array())
+                        .map(|a| a.len())
+                })
+                .unwrap_or(0)
+        }
+        Err(_) => 0,
+    };
+
+    Ok(IpcStatus { active, peer_count })
 }
 
 /// Show a native folder picker. Returns the chosen path, or None if cancelled.
