@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { ArrowLeft } from 'lucide-react';
-import { IndexProgress, TrustedPeer } from '../types';
+import { IndexProgress, IpcStatus, TrustedPeer } from '../types';
 import { useTheme } from '../hooks/useTheme';
 import { Select } from '../components/Select';
 import { UnderlineLoader } from '../components/UnderlineLoader';
@@ -137,7 +137,11 @@ export const Settings: React.FC = () => {
   const [theme, setTheme] = useState('dark');
 
   const [history, setHistory] = useState<TransferHistory[]>([]);
-  const [ipcActive, setIpcActive] = useState(false);
+  const [ipcStatus, setIpcStatus] = useState<IpcStatus>({
+    api_active: false,
+    synaptclip_present: false,
+    peer_count: 0,
+  });
 
   const loadTrusted = useCallback(async () => {
     setTrusted(await invoke<TrustedPeer[]>('get_trusted_peers').catch(() => []));
@@ -166,7 +170,7 @@ export const Settings: React.FC = () => {
       applyTheme(t);
 
       setAutostart(await invoke<boolean>('get_autostart').catch(() => false));
-      setIpcActive((await invoke<{ active: boolean; peer_count: number }>('get_ipc_status').catch(() => ({ active: false, peer_count: 0 }))).active);
+      setIpcStatus(await invoke<IpcStatus>('get_ipc_status').catch(() => ({ api_active: false, synaptclip_present: false, peer_count: 0 })));
 
       await loadTrusted();
       await loadSharedDirs();
@@ -600,18 +604,38 @@ export const Settings: React.FC = () => {
             <a href={REPO_URL} target="_blank" rel="noreferrer" className="text-xs" style={{ color: 'var(--accent)' }}>
               {REPO_URL}
             </a>
-            <div className="flex items-center gap-2 mt-1" title="SynaptClip integration endpoint — v0.5">
-              <span
-                className="text-[10px] px-1.5 py-0.5 rounded"
-                style={
-                  ipcActive
-                    ? { backgroundColor: 'var(--surface-hover)', color: 'var(--accent)', border: '1px solid var(--accent)' }
-                    : { backgroundColor: 'var(--surface-hover)', color: 'var(--muted)', border: '1px solid var(--border)' }
-                }
-              >
-                {ipcActive ? 'API active' : 'API inactive'}
-              </span>
-              <span className="text-xs" style={{ color: 'var(--muted)' }}>SynaptClip integration endpoint</span>
+            <div className="flex flex-col gap-1.5 mt-1">
+              {/* Integration API */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs" style={{ color: 'var(--muted)' }}>Integration API</span>
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block rounded-full"
+                    style={{ width: 7, height: 7, backgroundColor: ipcStatus.api_active ? 'var(--accent)' : 'var(--border)' }}
+                  />
+                  <span className="text-xs" style={{ color: ipcStatus.api_active ? 'var(--accent)' : 'var(--muted)' }}>
+                    {ipcStatus.api_active ? 'Active' : 'Inactive'}
+                  </span>
+                </span>
+              </div>
+              {/* SynaptClip */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs" style={{ color: 'var(--muted)' }}>SynaptClip</span>
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block rounded-full"
+                    style={{ width: 7, height: 7, backgroundColor: ipcStatus.synaptclip_present ? 'var(--accent)' : 'var(--border)' }}
+                  />
+                  <span className="text-xs" style={{ color: ipcStatus.synaptclip_present ? 'var(--accent)' : 'var(--muted)' }}>
+                    {ipcStatus.synaptclip_present ? 'Detected' : 'Not running'}
+                  </span>
+                </span>
+              </div>
+              <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                {ipcStatus.synaptclip_present
+                  ? `${ipcStatus.peer_count} peer(s) available for clipboard sync`
+                  : 'Install SynaptClip to enable cross-device clipboard sync'}
+              </p>
             </div>
           </div>
         </Section>

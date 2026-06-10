@@ -277,45 +277,48 @@ pub async fn get_autostart() -> Result<bool, String> {
     crate::platform::autostart::is_enabled().map_err(|e| e.to_string())
 }
 
-/// Reachability of the local IPC server plus the number of peers it lists.
+/// Reachability of Synapt's own API plus whether SynaptClip is detected.
 #[derive(serde::Serialize)]
 pub struct IpcStatus {
-    /// True when GET /v1/health responds 200.
-    pub active: bool,
-    /// Online peers reported by GET /v1/peers (0 when unreachable).
+    /// True when Synapt's own /v1/health responds 200.
+    pub api_active: bool,
+    /// True when SynaptClip's listener on port 57322 is reachable.
+    pub synaptclip_present: bool,
+    /// Number of currently online peers.
     pub peer_count: usize,
 }
 
-/// Probe the local IPC server: confirm /v1/health responds and read the peer count
-/// from /v1/peers. Used by the Settings page.
+/// Report whether Synapt's integration API is responding, whether SynaptClip is
+/// running, and how many peers are online. Used by the Settings page and overlay.
 #[tauri::command]
-pub async fn get_ipc_status() -> Result<IpcStatus, String> {
+pub async fn get_ipc_status(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<IpcStatus, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(1))
         .build()
         .map_err(|e| e.to_string())?;
 
-    let active = match client.get("http://127.0.0.1:57321/v1/health").send().await {
-        Ok(resp) => resp.status().is_success(),
-        Err(_) => false,
-    };
+    let api_active = client
+        .get("http://127.0.0.1:57321/v1/health")
+        .send()
+        .await
+        .map(|r| r.status().is_success())
+        .unwrap_or(false);
 
-    let peer_count = match client.get("http://127.0.0.1:57321/v1/peers").send().await {
-        Ok(resp) => {
-            let body = resp.text().await.unwrap_or_default();
-            serde_json::from_str::<serde_json::Value>(&body)
-                .ok()
-                .and_then(|v| {
-                    v.get("peers")
-                        .and_then(|p| p.as_array())
-                        .map(|a| a.len())
-                })
-                .unwrap_or(0)
-        }
-        Err(_) => 0,
-    };
+    // A TCP connect is cheaper than an HTTP request and works even if SynaptClip is
+    // up but not yet serving HTTP.
+    let synaptclip_present = tokio::net::TcpStream::connect("127.0.0.1:57322")
+        .await
+        .is_ok();
 
-    Ok(IpcStatus { active, peer_count })
+    let peer_count = crate::network::list_peers(&state.peer_map).len();
+
+    Ok(IpcStatus {
+        api_active,
+        synaptclip_present,
+        peer_count,
+    })
 }
 
 /// Show a native folder picker. Returns the chosen path, or None if cancelled.
