@@ -20,6 +20,7 @@ Synapt is a Spotlight-style launcher and LAN file utility — summon it with a g
 - Shared directory allow-list — peers only access what you explicitly share
 - Persistent file index in SQLite, tantivy full-text index rebuilt on startup
 - System tray icon with show/hide
+- SynaptClip integration — cross-device clipboard sync via local API when SynaptClip is installed
 - Linux (X11, Wayland GNOME, Wayland wlroots), Windows, macOS
 
 ## How It Works
@@ -79,6 +80,35 @@ Until native Wayland support lands (planned for v0.5, via the XDG Desktop Portal
 ## Security
 
 Synapt uses X25519 Elliptic Curve Diffie-Hellman for key exchange, ChaCha20-Poly1305 for all network traffic, and HKDF-SHA256 for key derivation. Device pairing uses a code-verification ceremony to detect man-in-the-middle attacks. Trusted peers can only access directories you explicitly add to the shared list. Trust can be revoked at any time from Settings.
+
+## SynaptClip Integration
+
+When SynaptClip is installed and running on the same machine, Synapt exposes a local HTTP API on port 57321 that enables cross-device clipboard sync.
+
+### What it enables
+
+- Send clipboard entries from SynaptClip to any trusted peer device
+- Receive clipboard entries from a peer's SynaptClip and have them appear in the local clip history
+- SynaptClip's panel shows a Devices section listing trusted peers when Synapt is running
+
+### How it works
+
+Synapt acts as the network transport. SynaptClip acts as the clipboard UI. Neither app depends on the other at build time. If Synapt is not running, SynaptClip works normally with no error. If SynaptClip is not installed, Synapt's file transfer and search features are unaffected.
+
+When SynaptClip sends a clip to a peer, it calls Synapt's local API. Synapt wraps the content as a temporary file and transfers it using its existing encrypted P2P transfer layer. When the clip arrives on the peer device, Synapt forwards it to the local SynaptClip instance via a webhook on port 57322.
+
+### Setup
+
+1. Install and run Synapt on both devices.
+2. Pair the devices using the @ device picker in the Synapt overlay.
+3. Install SynaptClip on both devices.
+4. Launch SynaptClip. It detects Synapt automatically.
+
+No additional configuration is needed.
+
+### API
+
+The integration API is documented in [api-contract.md](https://github.com/aatishbagal/synapt-clip/blob/main/references/api-contract.md).
 
 ## Related
 
