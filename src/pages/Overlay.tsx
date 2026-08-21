@@ -412,15 +412,13 @@ export const Overlay: React.FC = () => {
             className="h-4 w-4"
           />
           <span className="text-xs font-medium">Synapt</span>
+          {ipcStatus?.synaptclip_present && (
+            <span className="text-xs" style={{ color: 'var(--muted)' }}>
+              | SynaptClip <span style={{ fontSize: '10px' }}>connected</span>
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
-          {ipcStatus?.synaptclip_present && (
-            <span
-              title="SynaptClip connected"
-              className="inline-block rounded-full"
-              style={{ width: 7, height: 7, backgroundColor: 'var(--accent)' }}
-            />
-          )}
           <button
             type="button"
             onClick={() => nav('/settings')}
