@@ -70,11 +70,11 @@ fn build_tray(handle: &AppHandle, host: Host) -> tauri::Result<()> {
             }
         });
 
-    let builder = match handle.default_window_icon().cloned() {
-        Some(icon) => builder.icon(icon),
-        None => builder,
-    };
-    builder.build(handle)?;
+    // The tray icon is intentionally decoupled from the app's own bundle icon
+    // (default_window_icon): the app icon is an opaque squircle for the Dock,
+    // while the tray needs its own small transparent mark for the menu bar.
+    let icon = tauri::include_image!("icons/tray-icon.png");
+    builder.icon(icon).build(handle)?;
     Ok(())
 }
 
