@@ -10,7 +10,7 @@ import { DevicePicker } from '../components/DevicePicker';
 import { SearchLoadingBar } from '../components/SearchLoadingBar';
 import { TransferCard } from '../components/TransferCard';
 import { IndexingBanner } from '../components/IndexingBanner';
-import { Peer, SearchResult, TrustedPeer, DeviceOption, IndexProgress } from '../types';
+import { Peer, SearchResult, TrustedPeer, DeviceOption, IndexProgress, IpcStatus } from '../types';
 import { useTheme } from '../hooks/useTheme';
 import { parseInput } from '../utils/parseInput';
 import { stepDown, stepUp } from '../utils/navigation';
@@ -44,10 +44,22 @@ export const Overlay: React.FC = () => {
   const [expandedActionIndex, setExpandedActionIndex] = useState(0);
   const [sendToDevicesPath, setSendToDevicesPath] = useState<string | null>(null);
 
+  const [ipcStatus, setIpcStatus] = useState<IpcStatus | null>(null);
+
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { apply: applyTheme } = useTheme();
   const nav = useNavigate();
+
+  // Subtle SynaptClip presence indicator; refreshed every 30 seconds.
+  useEffect(() => {
+    const load = () => {
+      invoke<IpcStatus>('get_ipc_status').then(setIpcStatus).catch(() => undefined);
+    };
+    load();
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, []);
 
   const parsedInput = useMemo(
     () => parseInput(inputValue, selectedDevice !== null),
@@ -400,6 +412,11 @@ export const Overlay: React.FC = () => {
             className="h-4 w-4"
           />
           <span className="text-xs font-medium">Synapt</span>
+          {ipcStatus?.synaptclip_present && (
+            <span className="text-xs" style={{ color: 'var(--muted)' }}>
+              | SynaptClip <span style={{ fontSize: '10px' }}>connected</span>
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <button

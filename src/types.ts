@@ -79,3 +79,9 @@ export interface SearchResult {
   score: number;
   icon_path: string | null;
 }
+
+export interface IpcStatus {
+  api_active: boolean;
+  synaptclip_present: boolean;
+  peer_count: number;
+}

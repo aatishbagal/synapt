@@ -448,10 +448,108 @@ mod macos {
             name,
             // Launched via `open <path>` at launch time.
             exec: path.to_string_lossy().to_string(),
-            icon_path: None,
+            icon_path: extract_icon(path),
             platform: "macos".into(),
             source_path: path.to_string_lossy().to_string(),
         })
+    }
+
+    /// Target width, in pixels, for cached app icons. `.icns` bundles embed up to
+    /// 1024px; that's needlessly large for a search-result icon and would exceed
+    /// get_app_icon's 512 KB cap, so `sips` resizes it down before caching.
+    const ICON_TARGET_PX: u32 = 128;
+
+    /// Extract a `.app` bundle's icon via NSWorkspace, encode it as PNG, resize
+    /// it to [`ICON_TARGET_PX`] with `sips`, cache it under the user's cache
+    /// directory, and return that path. None on failure.
+    fn extract_icon(path: &std::path::Path) -> Option<String> {
+        use sha2::{Digest, Sha256};
+
+        let png = icon_png_bytes(path)?;
+        let cache_dir = dirs::cache_dir()?.join("synapt").join("app-icons");
+        std::fs::create_dir_all(&cache_dir).ok()?;
+        let digest = Sha256::digest(path.to_string_lossy().as_bytes());
+        let out = cache_dir.join(format!("{:x}.png", digest));
+
+        // NSBitmapImageRep's PNG encoder is used for correctness (it handles the
+        // source's actual bit depth/color space itself); `sips` then handles the
+        // resize, since it's Apple's own trusted resampler rather than a
+        // hand-rolled nearest-neighbor downsample of raw pixel bytes.
+        let tmp = cache_dir.join(format!("{:x}.src.png", digest));
+        std::fs::write(&tmp, &png).ok()?;
+        let status = std::process::Command::new("sips")
+            .args(["-Z", &ICON_TARGET_PX.to_string(), "-s", "format", "png"])
+            .arg(&tmp)
+            .arg("--out")
+            .arg(&out)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .ok()?;
+        std::fs::remove_file(&tmp).ok();
+
+        if !status.success() || !out.exists() {
+            return None;
+        }
+        Some(out.to_string_lossy().to_string())
+    }
+
+    /// Ask NSWorkspace for the file's icon and encode it as PNG via
+    /// NSBitmapImageRep's own PNG encoder. None if any step fails.
+    // The `objc` crate's `msg_send!`/`class!` macros expand a `cfg(feature = "cargo-clippy")`
+    // check that clippy's stable check-cfg lint doesn't recognize; this is upstream, not ours.
+    #[allow(unexpected_cfgs)]
+    fn icon_png_bytes(path: &std::path::Path) -> Option<Vec<u8>> {
+        use objc::runtime::Object;
+        use objc::{class, msg_send, sel, sel_impl};
+        use std::ffi::CString;
+
+        let path_str = path.to_str()?;
+        let c_path = CString::new(path_str).ok()?;
+
+        unsafe {
+            let ns_path: *mut Object =
+                msg_send![class!(NSString), stringWithUTF8String: c_path.as_ptr()];
+            if ns_path.is_null() {
+                return None;
+            }
+
+            let workspace: *mut Object = msg_send![class!(NSWorkspace), sharedWorkspace];
+            let icon: *mut Object = msg_send![workspace, iconForFile: ns_path];
+            if icon.is_null() {
+                return None;
+            }
+
+            let tiff: *mut Object = msg_send![icon, TIFFRepresentation];
+            if tiff.is_null() {
+                return None;
+            }
+
+            let bitmap: *mut Object =
+                msg_send![class!(NSBitmapImageRep), imageRepWithData: tiff];
+            if bitmap.is_null() {
+                return None;
+            }
+
+            let empty_props: *mut Object = msg_send![class!(NSDictionary), dictionary];
+            // NSBitmapImageFileTypePNG = 4.
+            let png_data: *mut Object =
+                msg_send![bitmap, representationUsingType: 4usize properties: empty_props];
+            if png_data.is_null() {
+                return None;
+            }
+
+            let length: usize = msg_send![png_data, length];
+            if length == 0 {
+                return None;
+            }
+            let bytes: *const u8 = msg_send![png_data, bytes];
+            if bytes.is_null() {
+                return None;
+            }
+
+            Some(std::slice::from_raw_parts(bytes, length).to_vec())
+        }
     }
 }
 

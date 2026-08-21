@@ -115,7 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         db:            Arc::clone(&db),
         identity:      Arc::clone(&identity_lock),
-        peer_map,
+        peer_map:      Arc::clone(&peer_map),
         trusted_ids:   Arc::clone(&trusted_ids),
         discovery_name: Arc::clone(&discovery_name),
         rebroadcast:   Arc::clone(&rebroadcast),
@@ -221,9 +221,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             });
 
-            // Local IPC server for SynaptClip integration (stub in v0.4).
+            // Local IPC server for SynaptClip integration.
+            let ipc_state = crate::ipc::server::IpcState {
+                peer_map:       Arc::clone(&peer_map),
+                trusted_ids:    Arc::clone(&trusted_ids),
+                db:             Arc::clone(&db),
+                identity:       Arc::clone(&identity),
+                transfer_queue: Arc::clone(&transfer_queue),
+                app:            app.handle().clone(),
+            };
             tokio::spawn(async move {
-                crate::ipc::server::start().await;
+                crate::ipc::server::start(ipc_state).await;
             });
 
             // Installed-application scan, independent of the file index.
