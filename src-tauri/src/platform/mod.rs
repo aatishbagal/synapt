@@ -61,6 +61,7 @@ fn is_wlroots_available() -> bool {
 }
 
 #[cfg(not(target_os = "linux"))]
+#[allow(dead_code)]
 fn is_wlroots_available() -> bool {
     false
 }

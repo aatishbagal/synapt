@@ -7,6 +7,9 @@
 /// Also disables the main window's drop shadow, since a transparent undecorated
 /// window otherwise gets a default AppKit shadow that shows up as a faint halo
 /// around the CSS-rounded overlay content.
+// The `objc` crate's `msg_send!`/`class!` macros expand a `cfg(feature = "cargo-clippy")`
+// check that clippy's stable check-cfg lint doesn't recognize; this is upstream, not ours.
+#[allow(unexpected_cfgs)]
 pub fn setup(app: &tauri::App) {
     use tauri::Manager;
 
