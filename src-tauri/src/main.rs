@@ -154,12 +154,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(window) = app.get_webview_window("main") {
                 let w = window.clone();
                 let suppress = Arc::clone(&suppress_hide);
-                window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::Focused(false) = event {
+                window.on_window_event(move |event| match event {
+                    tauri::WindowEvent::Focused(false) => {
                         if !suppress.load(std::sync::atomic::Ordering::Relaxed) {
                             let _ = w.hide();
                         }
                     }
+                    // The overlay is undecorated so it has no close button, but a
+                    // close can still be requested (Cmd+W, or the OS tearing the
+                    // window down). Hide it instead: quitting is tray-only.
+                    tauri::WindowEvent::CloseRequested { api, .. } => {
+                        api.prevent_close();
+                        let _ = w.hide();
+                    }
+                    _ => {}
                 });
             }
 
@@ -384,7 +392,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::trigger_app_scan,
             commands::hide_window,
         ])
-        .run(tauri::generate_context!())?;
+        .build(tauri::generate_context!())?
+        .run(|_app, event| {
+            // Suppress Cmd+Q, the app menu's Quit and the Dock's Quit. `code` is
+            // None only when the OS asked on the user's behalf; the tray menu
+            // quits via AppHandle::exit, which arrives with Some(code) and is
+            // allowed through so the confirmed quit still works.
+            if let tauri::RunEvent::ExitRequested { code: None, api, .. } = event {
+                api.prevent_exit();
+                tracing::debug!("ignored an OS quit request; quit from the tray menu instead");
+            }
+        });
 
     Ok(())
 }

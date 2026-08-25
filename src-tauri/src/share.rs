@@ -138,6 +138,7 @@ fn handle_self_command(handle: &AppHandle, cmd: TrayCommand) {
     match cmd {
         TrayCommand::Show { app } if app == SELF_KIND => show_self(handle),
         TrayCommand::Toggle { app } if app == SELF_KIND => toggle_self(handle),
+        // Forwarded by the tray host, which already confirmed with the user.
         TrayCommand::Quit => handle.exit(0),
         _ => {}
     }
@@ -166,12 +167,19 @@ fn route(handle: &AppHandle, host: &Host, cmd: TrayCommand) {
             }
         }
         TrayCommand::Quit => {
-            let mut clients = lock(&host.clients);
-            for stream in clients.values_mut() {
-                let _ = tray::write_command(stream, &TrayCommand::Quit);
-            }
-            drop(clients);
-            handle.exit(0);
+            // This is the user-initiated Quit from the tray menu this app owns,
+            // so it is the one place that asks for confirmation. Clients quit on
+            // the forwarded command below without prompting again.
+            let quitting = handle.clone();
+            let host = host.clone();
+            crate::platform::confirm_quit(handle, move || {
+                let mut clients = lock(&host.clients);
+                for stream in clients.values_mut() {
+                    let _ = tray::write_command(stream, &TrayCommand::Quit);
+                }
+                drop(clients);
+                quitting.exit(0);
+            });
         }
         TrayCommand::Register { .. } => {}
     }
