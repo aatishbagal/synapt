@@ -123,7 +123,7 @@ fn run_loop(
                 r#type:       "presence".into(),
                 device_id:    local_device_id.to_string(),
                 device_name:  lock(&device_name).clone(),
-                version:      "0.1.0".into(),
+                version:      env!("CARGO_PKG_VERSION").into(),
                 pairing_port: PAIRING_PORT,
             };
             if let Ok(json) = serde_json::to_string(&pkt) {

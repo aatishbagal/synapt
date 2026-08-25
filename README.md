@@ -117,4 +117,6 @@ The integration API is documented in [api-contract.md](https://github.com/aatish
 
 ## License
 
-Apache License 2.0 — see [LICENSE](./LICENSE).
+Copyright 2026 Aatish Bagal
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](./LICENSE) for the full text.
