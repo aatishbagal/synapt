@@ -173,9 +173,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Global hotkey to toggle the overlay.
             // Linux X11 uses XGrabKey; Wayland uses the inhibitor protocol and may
-            // require the user to grant permission. macOS uses CGEventTap and will
-            // prompt for Accessibility permission on first registration. Windows uses
-            // RegisterHotKey with no extra setup.
+            // require the user to grant permission. macOS uses Carbon RegisterEventHotKey,
+            // which needs no Accessibility permission but refuses combinations the system
+            // or another application already owns. Windows uses RegisterHotKey with no
+            // extra setup.
             {
                 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
                 if let Err(e) = app.global_shortcut().on_shortcut(
