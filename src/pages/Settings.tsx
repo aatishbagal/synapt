@@ -32,7 +32,7 @@ interface TransferHistory {
   completed_at: number | null;
 }
 
-const APP_VERSION = '0.5.0';
+const APP_VERSION = '0.5.1';
 const REPO_URL = 'https://github.com/aatishbagal/synapt';
 
 const inputStyle: React.CSSProperties = {
