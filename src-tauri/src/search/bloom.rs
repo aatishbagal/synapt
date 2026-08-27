@@ -38,6 +38,19 @@ impl BloomFilter {
         true
     }
 
+    /// Number of bits the filter is sized for.
+    pub fn bit_count(&self) -> usize {
+        self.bits.len()
+    }
+
+    /// Heap bytes held by the bit array.
+    ///
+    /// The array is a `Vec<bool>`, so this is one byte per bit rather than the
+    /// one eighth of that a packed bit vector would use.
+    pub fn heap_bytes(&self) -> usize {
+        self.bits.capacity() * std::mem::size_of::<bool>()
+    }
+
     fn fnv1a(data: &[u8]) -> u64 {
         let mut hash = 14695981039346656037u64;
         for &byte in data {

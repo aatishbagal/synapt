@@ -912,6 +912,109 @@ pub async fn remote_launch_app(
     }
 }
 
+/// Sum the size of every file under `path`, following subdirectories.
+///
+/// Returns 0 for a path that does not exist or cannot be read, since this only
+/// backs diagnostics.
+fn dir_size_bytes(path: &std::path::Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return 0;
+    };
+    entries
+        .filter_map(|e| e.ok())
+        .map(|entry| match entry.file_type() {
+            Ok(t) if t.is_dir() => dir_size_bytes(&entry.path()),
+            Ok(t) if t.is_file() => entry.metadata().map(|m| m.len()).unwrap_or(0),
+            _ => 0,
+        })
+        .sum()
+}
+
+/// Count the files directly inside `path`, or 0 when it cannot be read.
+fn dir_file_count(path: &std::path::Path) -> usize {
+    std::fs::read_dir(path)
+        .map(|entries| entries.filter_map(|e| e.ok()).count())
+        .unwrap_or(0)
+}
+
+/// Log the current memory footprint at info level, tagged with `phase`.
+///
+/// Diagnostic hook for the v0.5.2 memory audit, called once the file index is
+/// ready and once the application scan finishes so that a single run shows what
+/// each stage costs without needing the UI to invoke [`debug_memory_report`].
+pub fn log_memory_snapshot(phase: &str, engine: &crate::search::engine::SearchEngine) {
+    let report = engine.memory_report();
+
+    #[cfg(target_os = "macos")]
+    let process = crate::platform::macos::memory_usage_bytes()
+        .map(|(resident, footprint)| {
+            format!("resident {} MB, footprint {} MB", resident / 1_000_000, footprint / 1_000_000)
+        })
+        .unwrap_or_else(|| "unavailable".to_string());
+    #[cfg(not(target_os = "macos"))]
+    let process = "unavailable".to_string();
+
+    tracing::info!(
+        "memory [{}]: trie {} keys / {} nodes / {} MB ({} MB of that paths), bloom {} MB, \
+         cache {} entries, icons extracted {}, process {}",
+        phase,
+        report.trie_keys,
+        report.trie_nodes,
+        report.trie_heap_bytes / 1_000_000,
+        report.trie_value_bytes / 1_000_000,
+        report.bloom_heap_bytes / 1_000_000,
+        report.cache_entries,
+        crate::search::app_indexer::icons_extracted(),
+        process,
+    );
+}
+
+/// Report the in-memory footprint of Synapt's major structures.
+///
+/// Diagnostic command backing the v0.5.2 memory audit. It walks the whole Trie
+/// and the index directories, so it is deliberately not wired into any UI path.
+/// The `process` block is what to compare against `vmmap`: `phys_footprint` is
+/// the figure that reflects real RAM pressure, while the resident and virtual
+/// sizes `ps` prints include reserved address space that was never backed.
+#[tauri::command]
+pub async fn debug_memory_report(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<serde_json::Value, String> {
+    let search = state.search_engine.memory_report();
+    let file_count = state.db.count_files().await.map_err(|e| e.to_string())?;
+    let app_count = state.db.get_all_apps().await.map_err(|e| e.to_string())?.len();
+
+    let data_dir = dirs::data_dir().unwrap_or_default().join("synapt");
+    let tantivy_dir = data_dir.join("tantivy_index");
+    let icon_cache_dir = dirs::cache_dir().unwrap_or_default().join("synapt").join("app-icons");
+
+    let mut process = serde_json::json!({});
+    #[cfg(target_os = "macos")]
+    if let Some((resident, footprint)) = crate::platform::macos::memory_usage_bytes() {
+        process = serde_json::json!({
+            "resident_bytes":       resident,
+            "phys_footprint_bytes": footprint,
+        });
+    }
+
+    Ok(serde_json::json!({
+        "search":     search,
+        "file_count": file_count,
+        "app_count":  app_count,
+        "on_disk": {
+            "sqlite_bytes":     std::fs::metadata(data_dir.join("synapt.db"))
+                                    .map(|m| m.len())
+                                    .unwrap_or(0),
+            "tantivy_bytes":    dir_size_bytes(&tantivy_dir),
+            "icon_cache_bytes": dir_size_bytes(&icon_cache_dir),
+            "icon_cache_files": dir_file_count(&icon_cache_dir),
+        },
+        "tantivy_writer_heap_bytes": 50_000_000,
+        "icons_extracted_this_run":  crate::search::app_indexer::icons_extracted(),
+        "process": process,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

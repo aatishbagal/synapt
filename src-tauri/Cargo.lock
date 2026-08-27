@@ -4625,6 +4625,7 @@ dependencies = [
  "dirs 5.0.1",
  "hkdf",
  "hostname",
+ "libc",
  "local-ip-address",
  "lru",
  "objc",

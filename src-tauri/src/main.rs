@@ -245,10 +245,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Installed-application scan, independent of the file index.
             let db_for_apps = Arc::clone(&db);
+            let se_for_apps = Arc::clone(&search_engine);
             tokio::spawn(async move {
+                commands::log_memory_snapshot("before app scan", &se_for_apps);
                 if let Err(e) = search::app_indexer::run_app_scan(&db_for_apps).await {
                     tracing::warn!("app scan failed: {}", e);
                 }
+                commands::log_memory_snapshot("after app scan", &se_for_apps);
             });
 
             // Initial file system scan and full-text index build.
@@ -337,6 +340,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return;
                 }
                 ready.store(true, std::sync::atomic::Ordering::Relaxed);
+                commands::log_memory_snapshot("index ready", &se);
                 if needs_scan {
                     let _ = db4
                         .set_setting("last_full_index", &chrono::Utc::now().timestamp().to_string())
@@ -392,6 +396,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::get_app_icon,
             commands::trigger_app_scan,
             commands::hide_window,
+            commands::debug_memory_report,
         ])
         .build(tauri::generate_context!())?
         .run(|_app, event| {

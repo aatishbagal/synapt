@@ -1,5 +1,18 @@
 use crate::storage::{AppRow, Db, DbError};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use thiserror::Error;
+
+/// Application icons extracted since the process started.
+///
+/// Diagnostic counter for the memory audit. Icon extraction goes through the
+/// platform's native image APIs, so pairing this with the process footprint
+/// shows what an app scan costs per icon and whether rescans compound it.
+static ICONS_EXTRACTED: AtomicUsize = AtomicUsize::new(0);
+
+/// Read the process-lifetime count of extracted application icons.
+pub fn icons_extracted() -> usize {
+    ICONS_EXTRACTED.load(Ordering::Relaxed)
+}
 
 /// Errors raised while discovering or indexing installed applications.
 #[derive(Debug, Error)]
@@ -278,6 +291,7 @@ mod windows {
     /// cache directory, and return that path. None if extraction fails.
     fn extract_icon(path: &std::path::Path) -> Option<String> {
         use sha2::{Digest, Sha256};
+        super::ICONS_EXTRACTED.fetch_add(1, super::Ordering::Relaxed);
         let png = icon_png_bytes(path)?;
         let cache_dir = dirs::cache_dir()?.join("synapt").join("app-icons");
         std::fs::create_dir_all(&cache_dir).ok()?;
@@ -465,6 +479,7 @@ mod macos {
     fn extract_icon(path: &std::path::Path) -> Option<String> {
         use sha2::{Digest, Sha256};
 
+        super::ICONS_EXTRACTED.fetch_add(1, super::Ordering::Relaxed);
         let png = icon_png_bytes(path)?;
         let cache_dir = dirs::cache_dir()?.join("synapt").join("app-icons");
         std::fs::create_dir_all(&cache_dir).ok()?;

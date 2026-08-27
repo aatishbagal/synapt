@@ -134,6 +134,49 @@ impl Trie {
     pub fn is_empty(&self) -> bool {
         self.size == 0
     }
+
+    /// Total number of nodes, including the root.
+    ///
+    /// Diagnostic only: walks the whole structure, so it is O(nodes).
+    pub fn node_count(&self) -> usize {
+        1 + node_count(&self.root)
+    }
+
+    /// Heap bytes held by the stored value strings alone, excluding node overhead.
+    ///
+    /// Diagnostic only: walks the whole structure, so it is O(nodes).
+    pub fn value_bytes(&self) -> usize {
+        value_bytes(&self.root)
+    }
+
+    /// Estimated total heap bytes held by this Trie.
+    ///
+    /// Every node other than the root lives inside its parent's `HashMap`
+    /// table, so the dominant term is the sum of each node's table capacity
+    /// rather than the node count itself. Diagnostic only: O(nodes).
+    pub fn heap_bytes(&self) -> usize {
+        std::mem::size_of::<TrieNode>() + heap_bytes(&self.root)
+    }
+}
+
+/// Count `node`'s descendants, excluding `node` itself.
+fn node_count(node: &TrieNode) -> usize {
+    node.children.len() + node.children.values().map(node_count).sum::<usize>()
+}
+
+/// Sum the capacity of every value string in `node`'s subtree.
+fn value_bytes(node: &TrieNode) -> usize {
+    node.value.as_ref().map_or(0, String::capacity)
+        + node.children.values().map(value_bytes).sum::<usize>()
+}
+
+/// Estimate the heap bytes held by `node`'s children tables and value strings.
+fn heap_bytes(node: &TrieNode) -> usize {
+    // hashbrown stores one control byte per slot alongside each entry.
+    const SLOT: usize = std::mem::size_of::<(char, TrieNode)>() + 1;
+    node.children.capacity() * SLOT
+        + node.value.as_ref().map_or(0, String::capacity)
+        + node.children.values().map(heap_bytes).sum::<usize>()
 }
 
 impl Default for Trie {
