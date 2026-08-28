@@ -912,6 +912,17 @@ pub async fn remote_launch_app(
     }
 }
 
+/// Path of the crash log, or None when no crash has been recorded.
+///
+/// Returning None for a missing file lets the UI offer the log only when there
+/// is actually something in it.
+#[tauri::command]
+pub fn get_crash_log_path() -> Option<String> {
+    crate::crash::log_path()
+        .filter(|p| p.is_file())
+        .map(|p| p.to_string_lossy().to_string())
+}
+
 /// Log the current memory footprint at info level, tagged with `phase`.
 ///
 /// Called around the application scan and once the file index is ready, so a

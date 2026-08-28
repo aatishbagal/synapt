@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod crash;
 mod network;
 mod trust;
 mod storage;
@@ -58,6 +59,9 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Installed before anything else so a panic during startup is still logged.
+    crash::install_panic_hook();
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
@@ -396,6 +400,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::get_app_icon,
             commands::trigger_app_scan,
             commands::hide_window,
+            commands::get_crash_log_path,
         ])
         .build(tauri::generate_context!())?
         .run(|_app, event| {

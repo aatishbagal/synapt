@@ -142,6 +142,9 @@ export const Settings: React.FC = () => {
     synaptclip_present: false,
     peer_count: 0,
   });
+  // Null until a crash has actually been recorded, so the row stays hidden on
+  // a healthy install.
+  const [crashLogPath, setCrashLogPath] = useState<string | null>(null);
 
   const loadTrusted = useCallback(async () => {
     setTrusted(await invoke<TrustedPeer[]>('get_trusted_peers').catch(() => []));
@@ -170,6 +173,7 @@ export const Settings: React.FC = () => {
       applyTheme(t);
 
       setAutostart(await invoke<boolean>('get_autostart').catch(() => false));
+      setCrashLogPath(await invoke<string | null>('get_crash_log_path').catch(() => null));
       setIpcStatus(await invoke<IpcStatus>('get_ipc_status').catch(() => ({ api_active: false, synaptclip_present: false, peer_count: 0 })));
 
       await loadTrusted();
@@ -636,6 +640,23 @@ export const Settings: React.FC = () => {
                   ? `${ipcStatus.peer_count} peer(s) available for clipboard sync`
                   : 'Install SynaptClip to enable cross-device clipboard sync'}
               </p>
+              {crashLogPath && (
+                <div className="flex flex-col gap-0.5 mt-1">
+                  <p className="text-[11px] break-all" style={{ color: 'var(--muted)' }}>
+                    Crash log: {crashLogPath}
+                  </p>
+                  <button
+                    type="button"
+                    className="text-[11px] text-left"
+                    style={{ color: 'var(--accent)' }}
+                    onClick={() => {
+                      invoke('reveal_in_files', { path: crashLogPath }).catch(() => {});
+                    }}
+                  >
+                    Open in file manager
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </Section>
