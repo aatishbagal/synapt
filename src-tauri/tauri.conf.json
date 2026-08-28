@@ -35,7 +35,7 @@
       "active": true,
       "pubkey": "",
       "endpoints": [
-        "https://raw.githubusercontent.com/aatishbagal/synapt/main/updater.json"
+        "https://github.com/aatishbagal/synapt/releases/latest/download/latest.json"
       ],
       "dialog": false
     }
