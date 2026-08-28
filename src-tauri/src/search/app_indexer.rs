@@ -1,5 +1,35 @@
 use crate::storage::{AppRow, Db, DbError};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use thiserror::Error;
+
+/// Application icons extracted since the process started.
+///
+/// Diagnostic counter for the memory audit. Icon extraction goes through the
+/// platform's native image APIs, so pairing this with the process footprint
+/// shows what an app scan costs per icon and whether rescans compound it.
+static ICONS_EXTRACTED: AtomicUsize = AtomicUsize::new(0);
+
+/// Read the process-lifetime count of extracted application icons.
+pub fn icons_extracted() -> usize {
+    ICONS_EXTRACTED.load(Ordering::Relaxed)
+}
+
+/// Whether `cached` exists and is no older than `source`.
+///
+/// Icon extraction is by far the most expensive step of an application scan, so
+/// the cached PNG is reused until the bundle it was taken from changes.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn is_cache_fresh(cached: &std::path::Path, source: &std::path::Path) -> bool {
+    let Ok(cached_at) = std::fs::metadata(cached).and_then(|m| m.modified()) else {
+        return false;
+    };
+    match std::fs::metadata(source).and_then(|m| m.modified()) {
+        Ok(source_at) => cached_at >= source_at,
+        // The source's age is unknown, so keep the cached icon rather than
+        // paying for a re-extraction on every scan.
+        Err(_) => true,
+    }
+}
 
 /// Errors raised while discovering or indexing installed applications.
 #[derive(Debug, Error)]
@@ -278,11 +308,16 @@ mod windows {
     /// cache directory, and return that path. None if extraction fails.
     fn extract_icon(path: &std::path::Path) -> Option<String> {
         use sha2::{Digest, Sha256};
-        let png = icon_png_bytes(path)?;
         let cache_dir = dirs::cache_dir()?.join("synapt").join("app-icons");
         std::fs::create_dir_all(&cache_dir).ok()?;
         let digest = Sha256::digest(path.to_string_lossy().as_bytes());
         let out = cache_dir.join(format!("{:x}.png", digest));
+        if super::is_cache_fresh(&out, path) {
+            return Some(out.to_string_lossy().to_string());
+        }
+
+        super::ICONS_EXTRACTED.fetch_add(1, super::Ordering::Relaxed);
+        let png = icon_png_bytes(path)?;
         std::fs::write(&out, &png).ok()?;
         Some(out.to_string_lossy().to_string())
     }
@@ -465,33 +500,68 @@ mod macos {
     fn extract_icon(path: &std::path::Path) -> Option<String> {
         use sha2::{Digest, Sha256};
 
-        let png = icon_png_bytes(path)?;
         let cache_dir = dirs::cache_dir()?.join("synapt").join("app-icons");
         std::fs::create_dir_all(&cache_dir).ok()?;
         let digest = Sha256::digest(path.to_string_lossy().as_bytes());
         let out = cache_dir.join(format!("{:x}.png", digest));
+        if super::is_cache_fresh(&out, path) {
+            return Some(out.to_string_lossy().to_string());
+        }
 
-        // NSBitmapImageRep's PNG encoder is used for correctness (it handles the
-        // source's actual bit depth/color space itself); `sips` then handles the
-        // resize, since it's Apple's own trusted resampler rather than a
-        // hand-rolled nearest-neighbor downsample of raw pixel bytes.
+        super::ICONS_EXTRACTED.fetch_add(1, super::Ordering::Relaxed);
+
+        // Preferred path: hand the bundle's own .icns straight to `sips`, so
+        // the decode happens in a subprocess whose memory is reclaimed when it
+        // exits. Going through NSWorkspace instead makes AppKit decode every
+        // representation the .icns holds, up to 1024px, and NSWorkspace retains
+        // the NSImages it hands out in a cache of its own, so a single scan
+        // costs tens of megabytes per application that no autorelease pool can
+        // reclaim.
+        if let Some(icns) = icns_path(path) {
+            if sips_convert(&icns, &out) {
+                return Some(out.to_string_lossy().to_string());
+            }
+        }
+
+        // Fallback for bundles that declare no icon file of their own: ask
+        // AppKit, which at least yields the generic document icon.
+        let png = icon_png_bytes(path)?;
         let tmp = cache_dir.join(format!("{:x}.src.png", digest));
         std::fs::write(&tmp, &png).ok()?;
+        let converted = sips_convert(&tmp, &out);
+        std::fs::remove_file(&tmp).ok();
+        converted.then(|| out.to_string_lossy().to_string())
+    }
+
+    /// Locate a bundle's own icon file via `CFBundleIconFile`, if it declares one.
+    fn icns_path(bundle: &std::path::Path) -> Option<std::path::PathBuf> {
+        let plist_path = bundle.join("Contents").join("Info.plist");
+        let value: plist::Value = plist::from_file(&plist_path).ok()?;
+        let name = value.as_dictionary()?.get("CFBundleIconFile")?.as_string()?;
+        let resources = bundle.join("Contents").join("Resources");
+        // CFBundleIconFile is allowed to leave the extension off.
+        let direct = resources.join(name);
+        if direct.is_file() {
+            return Some(direct);
+        }
+        let with_ext = resources.join(format!("{name}.icns"));
+        with_ext.is_file().then_some(with_ext)
+    }
+
+    /// Resize `src` to [`ICON_TARGET_PX`] and write it to `dst` as a PNG.
+    ///
+    /// `sips` is Apple's own resampler, so this keeps colour space and bit depth
+    /// handling correct without decoding the full-size source in this process.
+    fn sips_convert(src: &std::path::Path, dst: &std::path::Path) -> bool {
         let status = std::process::Command::new("sips")
             .args(["-Z", &ICON_TARGET_PX.to_string(), "-s", "format", "png"])
-            .arg(&tmp)
+            .arg(src)
             .arg("--out")
-            .arg(&out)
+            .arg(dst)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .status()
-            .ok()?;
-        std::fs::remove_file(&tmp).ok();
-
-        if !status.success() || !out.exists() {
-            return None;
-        }
-        Some(out.to_string_lossy().to_string())
+            .status();
+        matches!(status, Ok(s) if s.success()) && dst.is_file()
     }
 
     /// Ask NSWorkspace for the file's icon and encode it as PNG via
@@ -500,6 +570,7 @@ mod macos {
     // check that clippy's stable check-cfg lint doesn't recognize; this is upstream, not ours.
     #[allow(unexpected_cfgs)]
     fn icon_png_bytes(path: &std::path::Path) -> Option<Vec<u8>> {
+        use objc::rc::autoreleasepool;
         use objc::runtime::Object;
         use objc::{class, msg_send, sel, sel_impl};
         use std::ffi::CString;
@@ -507,7 +578,12 @@ mod macos {
         let path_str = path.to_str()?;
         let c_path = CString::new(path_str).ok()?;
 
-        unsafe {
+        // Every object below is autoreleased, and this runs on a tokio worker
+        // thread where AppKit keeps no ambient pool. Without an explicit one
+        // nothing is ever drained, and the intermediate TIFF alone is tens of
+        // megabytes per icon because it serialises every representation an
+        // .icns holds, up to 1024px.
+        autoreleasepool(|| unsafe {
             let ns_path: *mut Object =
                 msg_send![class!(NSString), stringWithUTF8String: c_path.as_ptr()];
             if ns_path.is_null() {
@@ -548,8 +624,9 @@ mod macos {
                 return None;
             }
 
+            // Copied out before the pool drains and frees the NSData.
             Some(std::slice::from_raw_parts(bytes, length).to_vec())
-        }
+        })
     }
 }
 

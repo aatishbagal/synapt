@@ -114,10 +114,20 @@ jobs:
       # below exist in this repo's settings. Until then tauri-action builds an
       # unsigned .app/.dmg (same Gatekeeper "unidentified developer" prompt as
       # a local build) rather than failing the job.
+      #
+      # Updater signing is separate from the Apple identity above and uses its
+      # own minisign keypair. With TAURI_SIGNING_PRIVATE_KEY set and
+      # bundle.createUpdaterArtifacts on, the CLI signs each updater bundle and
+      # tauri-action composes latest.json from the signatures, uploading it to
+      # the release as an asset. That asset is what tauri.conf.json points its
+      # updater endpoint at, so no file has to be committed back to main.
+      # Without the secret the job still succeeds, just with no updater assets.
       - name: Build and publish release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}

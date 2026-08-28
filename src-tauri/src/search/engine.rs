@@ -284,6 +284,52 @@ impl SearchEngine {
     pub fn invalidate_cache(&self) {
         lock(&self.cache).clear();
     }
+
+    /// Measure the in-memory footprint of the Trie, Bloom filter and LRU cache.
+    ///
+    /// Diagnostic only: walking the Trie is O(nodes) and holds its lock for the
+    /// duration, so this is not for a hot path.
+    pub fn memory_report(&self) -> SearchEngineMemory {
+        let (trie_keys, trie_nodes, trie_value_bytes, trie_heap_bytes) = {
+            let trie = lock(&self.trie);
+            (trie.len(), trie.node_count(), trie.value_bytes(), trie.heap_bytes())
+        };
+        let (bloom_bits, bloom_heap_bytes) = {
+            let bloom = lock(&self.bloom);
+            (bloom.bit_count(), bloom.heap_bytes())
+        };
+        SearchEngineMemory {
+            trie_keys,
+            trie_nodes,
+            trie_value_bytes,
+            trie_heap_bytes,
+            bloom_bits,
+            bloom_heap_bytes,
+            cache_entries: lock(&self.cache).len(),
+            cache_capacity: LRU_CAPACITY,
+        }
+    }
+}
+
+/// Measured in-memory footprint of the search engine's structures.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SearchEngineMemory {
+    /// Unique keys stored in the Trie, one per indexed file name.
+    pub trie_keys:        usize,
+    /// Total Trie nodes, roughly one per distinct name prefix.
+    pub trie_nodes:       usize,
+    /// Heap bytes held by the full paths stored as Trie values.
+    pub trie_value_bytes: usize,
+    /// Estimated total Trie heap bytes, including per-node child tables.
+    pub trie_heap_bytes:  usize,
+    /// Bits the Bloom filter is sized for.
+    pub bloom_bits:       usize,
+    /// Heap bytes held by the Bloom filter's bit array.
+    pub bloom_heap_bytes: usize,
+    /// Entries currently held in the session search cache.
+    pub cache_entries:    usize,
+    /// Maximum entries the session search cache retains.
+    pub cache_capacity:   usize,
 }
 
 #[cfg(test)]

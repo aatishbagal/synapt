@@ -1,4 +1,5 @@
 use std::sync::MutexGuard;
+use tauri::Emitter;
 
 /// Lock a std mutex, recovering the guard if a holder thread panicked.
 fn lock<T>(m: &std::sync::Mutex<T>) -> MutexGuard<'_, T> {
@@ -910,6 +911,145 @@ pub async fn remote_launch_app(
         }
         _ => Err("unexpected response from peer".to_string()),
     }
+}
+
+/// Version of the running build.
+///
+/// Served from the binary so the UI never carries a copy that can drift from
+/// Cargo.toml and tauri.conf.json.
+#[tauri::command]
+pub fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+/// Whether automatic update checks are enabled. Defaults to true when unset.
+pub async fn auto_update_enabled(db: &crate::storage::Db) -> bool {
+    db.get_setting("auto_update_check").await.ok().flatten().as_deref() != Some("false")
+}
+
+/// Run the startup update check, when the setting allows it.
+///
+/// Emits `update-available` so an open Settings window can show the result
+/// without the user asking, and notifies as well, since at launch they are
+/// unlikely to be looking at Settings at all.
+pub async fn run_auto_update_check(app: &tauri::AppHandle, db: &crate::storage::Db) {
+    if !auto_update_enabled(db).await {
+        tracing::debug!("automatic update check is disabled");
+        return;
+    }
+    match check_for_update(app.clone()).await {
+        Ok(Some(info)) => {
+            tracing::info!("update available: v{}", info.version);
+            if crate::notify::enabled(db).await {
+                crate::notify::update_available(app, &info.version);
+            }
+            if let Err(e) = app.emit("update-available", &info) {
+                tracing::warn!("could not emit update-available: {e}");
+            }
+        }
+        Ok(None) => tracing::info!("update check: already up to date"),
+        Err(e) => tracing::warn!("update check failed: {e}"),
+    }
+}
+
+/// An available update, as shown in the About section.
+#[derive(Clone, serde::Serialize)]
+pub struct UpdateInfo {
+    /// Version offered by the update endpoint.
+    pub version: String,
+    /// Version currently running.
+    pub current: String,
+    /// Release notes from the endpoint, empty when it supplies none.
+    pub notes:   String,
+}
+
+/// Check the update endpoint, returning None when already up to date.
+#[tauri::command]
+pub async fn check_for_update(app: tauri::AppHandle) -> Result<Option<UpdateInfo>, String> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let update = app
+        .updater()
+        .map_err(|e| e.to_string())?
+        .check()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(update.map(|u| UpdateInfo {
+        version: u.version.clone(),
+        current: u.current_version.clone(),
+        notes:   u.body.clone().unwrap_or_default(),
+    }))
+}
+
+/// Download and install the available update, then restart into it.
+///
+/// Re-checks rather than taking a handle from [`check_for_update`], since the
+/// plugin's update handle is not `Send` across the command boundary.
+#[tauri::command]
+pub async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let update = app
+        .updater()
+        .map_err(|e| e.to_string())?
+        .check()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match update {
+        Some(update) => {
+            update
+                .download_and_install(|_chunk, _total| {}, || {})
+                .await
+                .map_err(|e| e.to_string())?;
+            app.restart();
+        }
+        None => Err("no update available".to_string()),
+    }
+}
+
+/// Path of the crash log, or None when no crash has been recorded.
+///
+/// Returning None for a missing file lets the UI offer the log only when there
+/// is actually something in it.
+#[tauri::command]
+pub fn get_crash_log_path() -> Option<String> {
+    crate::crash::log_path()
+        .filter(|p| p.is_file())
+        .map(|p| p.to_string_lossy().to_string())
+}
+
+/// Log the current memory footprint at info level, tagged with `phase`.
+///
+/// Called around the application scan and once the file index is ready, so a
+/// single `RUST_LOG=info` run shows what each startup stage costs. Cheap enough
+/// to keep: it walks the Trie once per phase, three times per launch.
+pub fn log_memory_snapshot(phase: &str, engine: &crate::search::engine::SearchEngine) {
+    let report = engine.memory_report();
+
+    #[cfg(target_os = "macos")]
+    let process = crate::platform::macos::memory_usage_bytes()
+        .map(|(resident, footprint)| {
+            format!("resident {} MB, footprint {} MB", resident / 1_000_000, footprint / 1_000_000)
+        })
+        .unwrap_or_else(|| "unavailable".to_string());
+    #[cfg(not(target_os = "macos"))]
+    let process = "unavailable".to_string();
+
+    tracing::info!(
+        "memory [{}]: trie {} keys / {} nodes / {} MB ({} MB of that paths), bloom {} MB, \
+         cache {} entries, icons extracted {}, process {}",
+        phase,
+        report.trie_keys,
+        report.trie_nodes,
+        report.trie_heap_bytes / 1_000_000,
+        report.trie_value_bytes / 1_000_000,
+        report.bloom_heap_bytes / 1_000_000,
+        report.cache_entries,
+        crate::search::app_indexer::icons_extracted(),
+        process,
+    );
 }
 
 #[cfg(test)]

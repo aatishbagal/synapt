@@ -84,6 +84,37 @@ pub fn confirm_quit_dialog() -> bool {
     }
 }
 
+/// Resident size and physical memory footprint of this process, in bytes.
+///
+/// `phys_footprint` is the figure Activity Monitor and `vmmap` report, and is
+/// the one that reflects real RAM pressure: RSS alone misses some dirty
+/// mappings, and VSZ on Apple silicon is dominated by hundreds of gigabytes of
+/// reserved address space that was never backed by memory. Returns None when
+/// the kernel call fails.
+pub fn memory_usage_bytes() -> Option<(u64, u64)> {
+    let mut info = std::mem::MaybeUninit::<libc::rusage_info_v2>::zeroed();
+    // `rusage_info_t` is `void *`, so the parameter type is `void **`, but the
+    // kernel writes the struct itself there: the documented call casts the
+    // address of a `rusage_info_v2` to that type rather than passing a pointer
+    // to a pointer.
+    // SAFETY: the buffer is a zeroed rusage_info_v2, which is what the kernel
+    // fills in for the RUSAGE_INFO_V2 flavour.
+    let rc = unsafe {
+        libc::proc_pid_rusage(
+            std::process::id() as i32,
+            libc::RUSAGE_INFO_V2,
+            info.as_mut_ptr() as *mut libc::rusage_info_t,
+        )
+    };
+    if rc != 0 {
+        tracing::warn!("macOS: proc_pid_rusage failed with code {rc}");
+        return None;
+    }
+    // SAFETY: proc_pid_rusage returned success, so the struct is initialised.
+    let info = unsafe { info.assume_init() };
+    Some((info.ri_resident_size, info.ri_phys_footprint))
+}
+
 /// Wrap a NUL-terminated C string in an autoreleased NSString.
 ///
 /// # Safety

@@ -25,9 +25,32 @@ pub fn transfer_complete(app: &AppHandle, filename: &str, peer_name: &str) {
     send(app, "Transfer complete", &format!("{filename} received from {peer_name}"));
 }
 
+/// Notify that a device is asking to pair.
+///
+/// Fired alongside the `pair-request` event, which only reaches the user when
+/// the overlay happens to be visible. The notification is informational: accept
+/// and reject still happen in the overlay, so it tells the user to open Synapt
+/// rather than offering the choice itself.
+pub fn peer_pair_request(app: &AppHandle, peer_name: &str) {
+    send(
+        app,
+        "Pairing request",
+        &format!("{peer_name} wants to pair with this device. Open Synapt to accept or reject."),
+    );
+}
+
 /// Notify that a new device was paired.
 pub fn peer_paired(app: &AppHandle, peer_name: &str) {
     send(app, "Device paired", &format!("{peer_name} is now a trusted device"));
+}
+
+/// Notify that a newer version is available to install.
+pub fn update_available(app: &AppHandle, version: &str) {
+    send(
+        app,
+        "Update available",
+        &format!("Synapt {version} is ready to install. Open Settings to update."),
+    );
 }
 
 /// Notify that a trusted peer came online.

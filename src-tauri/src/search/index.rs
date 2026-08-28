@@ -8,6 +8,17 @@ use tantivy::schema::{Field, Schema, Value, STORED, STRING, TEXT};
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument};
 use thiserror::Error;
 
+/// Arena the tantivy writer keeps for the whole life of the process.
+///
+/// The writer is only used for the startup rebuild and for single-file updates,
+/// so it spends nearly all of its time idle holding this budget. This is
+/// tantivy's own documented floor: it divides the budget across indexing
+/// threads and rejects anything under 15 MB per thread, so 15 MB buys one
+/// indexing thread and is the smallest arena it will accept. A rebuild flushes
+/// more segments than a larger arena would, which the merge policy then folds
+/// back together.
+const WRITER_HEAP_BYTES: usize = 15_000_000;
+
 /// Errors raised by the full-text index layer.
 #[derive(Debug, Error)]
 pub enum IndexError {
@@ -101,7 +112,7 @@ impl FileIndex {
                 Self::open_or_create(&index_dir, &schema)?
             }
         };
-        let writer: IndexWriter = index.writer(50_000_000)?;
+        let writer: IndexWriter = index.writer(WRITER_HEAP_BYTES)?;
         let reader = index
             .reader_builder()
             .reload_policy(ReloadPolicy::Manual)

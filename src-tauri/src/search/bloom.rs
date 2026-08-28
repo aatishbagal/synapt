@@ -1,8 +1,14 @@
 /// Bloom filter using FNV-1a and DJB2 double hashing as a search pre-filter gate.
+///
+/// The bit array is packed into `u64` words rather than held as a `Vec<bool>`,
+/// which would spend a whole byte per bit.
 #[derive(Debug, Clone)]
 pub struct BloomFilter {
-    bits: Vec<bool>,
+    bits: Vec<u64>,
     k:    usize,
+    /// Total bits addressed, which is not `bits.len() * 64` once the requested
+    /// size is rounded up to a whole number of words.
+    m:    usize,
     /// Configured expected capacity, retained for diagnostics and resizing decisions.
     #[allow(dead_code)]
     capacity: usize,
@@ -17,25 +23,33 @@ impl BloomFilter {
         let k = (((m as f64) / cap as f64) * std::f64::consts::LN_2)
             .round()
             .max(1.0) as usize;
-        Self { bits: vec![false; m], k, capacity: cap }
+        Self { bits: vec![0u64; m.div_ceil(64)], k, m, capacity: cap }
     }
 
     /// Insert a term into the filter.
     pub fn insert(&mut self, term: &str) {
         for i in 0..self.k {
-            let idx = self.hash_i(term, i);
-            self.bits[idx] = true;
+            let pos = self.hash_i(term, i);
+            self.bits[pos / 64] |= 1u64 << (pos % 64);
         }
     }
 
     /// Return true if the term may be present, false if it is definitely absent.
     pub fn may_contain(&self, term: &str) -> bool {
-        for i in 0..self.k {
-            if !self.bits[self.hash_i(term, i)] {
-                return false;
-            }
-        }
-        true
+        (0..self.k).all(|i| {
+            let pos = self.hash_i(term, i);
+            (self.bits[pos / 64] >> (pos % 64)) & 1 == 1
+        })
+    }
+
+    /// Number of bits the filter is sized for.
+    pub fn bit_count(&self) -> usize {
+        self.m
+    }
+
+    /// Heap bytes held by the bit array.
+    pub fn heap_bytes(&self) -> usize {
+        self.bits.capacity() * std::mem::size_of::<u64>()
     }
 
     fn fnv1a(data: &[u8]) -> u64 {
@@ -60,7 +74,7 @@ impl BloomFilter {
         // Force the DJB2 step odd so it stays coprime with an even table size,
         // keeping the k probes distinct and the false-positive rate near optimal.
         let h2 = Self::djb2(term.as_bytes()) | 1;
-        (h1.wrapping_add((i as u64).wrapping_mul(h2)) % self.bits.len() as u64) as usize
+        (h1.wrapping_add((i as u64).wrapping_mul(h2)) % self.m as u64) as usize
     }
 }
 

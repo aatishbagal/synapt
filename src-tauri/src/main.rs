@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod crash;
 mod network;
 mod trust;
 mod storage;
@@ -58,6 +59,9 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Installed before anything else so a panic during startup is still logged.
+    crash::install_panic_hook();
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
@@ -133,6 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .setup(move |app| {
             platform::setup_current();
@@ -243,12 +248,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 crate::ipc::server::start(ipc_state).await;
             });
 
+            // Automatic update check. Delayed so it does not compete with
+            // indexing and the network stack for the first seconds of startup.
+            let db_for_updates = Arc::clone(&db);
+            let handle_updates = app.handle().clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+                commands::run_auto_update_check(&handle_updates, &db_for_updates).await;
+            });
+
             // Installed-application scan, independent of the file index.
             let db_for_apps = Arc::clone(&db);
+            let se_for_apps = Arc::clone(&search_engine);
             tokio::spawn(async move {
+                commands::log_memory_snapshot("before app scan", &se_for_apps);
                 if let Err(e) = search::app_indexer::run_app_scan(&db_for_apps).await {
                     tracing::warn!("app scan failed: {}", e);
                 }
+                commands::log_memory_snapshot("after app scan", &se_for_apps);
             });
 
             // Initial file system scan and full-text index build.
@@ -337,6 +354,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return;
                 }
                 ready.store(true, std::sync::atomic::Ordering::Relaxed);
+                commands::log_memory_snapshot("index ready", &se);
                 if needs_scan {
                     let _ = db4
                         .set_setting("last_full_index", &chrono::Utc::now().timestamp().to_string())
@@ -392,6 +410,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::get_app_icon,
             commands::trigger_app_scan,
             commands::hide_window,
+            commands::get_crash_log_path,
+            commands::check_for_update,
+            commands::install_update,
+            commands::get_app_version,
         ])
         .build(tauri::generate_context!())?
         .run(|_app, event| {
