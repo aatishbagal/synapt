@@ -396,7 +396,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::get_app_icon,
             commands::trigger_app_scan,
             commands::hide_window,
-            commands::debug_memory_report,
         ])
         .build(tauri::generate_context!())?
         .run(|_app, event| {

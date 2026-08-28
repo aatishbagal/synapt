@@ -1,8 +1,12 @@
-use std::collections::HashMap;
-
 /// A single node in the prefix Trie.
+///
+/// Children live in a `Vec` kept sorted by character rather than a `HashMap`.
+/// Trie nodes hold a handful of children each, and at that size a hash table
+/// costs several times the entries themselves: its header is twice a `Vec`'s,
+/// and it rounds its table up to a power of two and keeps it under a load
+/// factor, so a node with one child still pays for four slots.
 struct TrieNode {
-    children:  HashMap<char, TrieNode>,
+    children:  Vec<(char, TrieNode)>,
     is_end:    bool,
     frequency: u32,
     value:     Option<String>,
@@ -10,7 +14,39 @@ struct TrieNode {
 
 impl TrieNode {
     fn new() -> Self {
-        Self { children: HashMap::new(), is_end: false, frequency: 0, value: None }
+        Self { children: Vec::new(), is_end: false, frequency: 0, value: None }
+    }
+
+    /// Locate `c` among the children, or the index it would be inserted at.
+    fn find(&self, c: char) -> Result<usize, usize> {
+        self.children.binary_search_by(|(k, _)| k.cmp(&c))
+    }
+
+    fn child(&self, c: char) -> Option<&TrieNode> {
+        self.find(c).ok().map(|i| &self.children[i].1)
+    }
+
+    fn child_mut(&mut self, c: char) -> Option<&mut TrieNode> {
+        let i = self.find(c).ok()?;
+        Some(&mut self.children[i].1)
+    }
+
+    /// Get `c`'s child, inserting an empty node in sort order when absent.
+    fn child_or_insert(&mut self, c: char) -> &mut TrieNode {
+        let i = match self.find(c) {
+            Ok(i) => i,
+            Err(i) => {
+                self.children.insert(i, (c, TrieNode::new()));
+                i
+            }
+        };
+        &mut self.children[i].1
+    }
+
+    fn remove_child(&mut self, c: char) {
+        if let Ok(i) = self.find(c) {
+            self.children.remove(i);
+        }
     }
 }
 
@@ -36,7 +72,7 @@ impl Trie {
     pub fn insert(&mut self, key: &str, value: String) {
         let mut node = &mut self.root;
         for c in key.chars() {
-            node = node.children.entry(c).or_insert_with(TrieNode::new);
+            node = node.child_or_insert(c);
         }
         if node.is_end {
             node.frequency += 1;
@@ -72,7 +108,7 @@ impl Trie {
             return RemoveResult { existed: true, fully_removed: false };
         }
         let c = chars[i];
-        let (result, child_dead) = match node.children.get_mut(&c) {
+        let (result, child_dead) = match node.child_mut(c) {
             None => return RemoveResult { existed: false, fully_removed: false },
             Some(child) => {
                 let r = Self::remove_rec(child, chars, i + 1);
@@ -81,7 +117,7 @@ impl Trie {
             }
         };
         if result.existed && child_dead {
-            node.children.remove(&c);
+            node.remove_child(c);
         }
         result
     }
@@ -90,7 +126,7 @@ impl Trie {
     pub fn get(&self, key: &str) -> Option<&str> {
         let mut node = &self.root;
         for c in key.chars() {
-            node = node.children.get(&c)?;
+            node = node.child(c)?;
         }
         if node.is_end {
             node.value.as_deref()
@@ -103,7 +139,7 @@ impl Trie {
     pub fn prefix_search(&self, prefix: &str, limit: usize) -> Vec<String> {
         let mut node = &self.root;
         for c in prefix.chars() {
-            match node.children.get(&c) {
+            match node.child(c) {
                 Some(n) => node = n,
                 None => return Vec::new(),
             }
@@ -120,7 +156,7 @@ impl Trie {
                 out.push((node.frequency, v.clone()));
             }
         }
-        for child in node.children.values() {
+        for (_, child) in &node.children {
             Self::collect(child, out);
         }
     }
@@ -151,8 +187,8 @@ impl Trie {
 
     /// Estimated total heap bytes held by this Trie.
     ///
-    /// Every node other than the root lives inside its parent's `HashMap`
-    /// table, so the dominant term is the sum of each node's table capacity
+    /// Every node other than the root lives inside its parent's children
+    /// vector, so the dominant term is the sum of each node's vector capacity
     /// rather than the node count itself. Diagnostic only: O(nodes).
     pub fn heap_bytes(&self) -> usize {
         std::mem::size_of::<TrieNode>() + heap_bytes(&self.root)
@@ -161,22 +197,20 @@ impl Trie {
 
 /// Count `node`'s descendants, excluding `node` itself.
 fn node_count(node: &TrieNode) -> usize {
-    node.children.len() + node.children.values().map(node_count).sum::<usize>()
+    node.children.len() + node.children.iter().map(|(_, c)| node_count(c)).sum::<usize>()
 }
 
 /// Sum the capacity of every value string in `node`'s subtree.
 fn value_bytes(node: &TrieNode) -> usize {
     node.value.as_ref().map_or(0, String::capacity)
-        + node.children.values().map(value_bytes).sum::<usize>()
+        + node.children.iter().map(|(_, c)| value_bytes(c)).sum::<usize>()
 }
 
 /// Estimate the heap bytes held by `node`'s children tables and value strings.
 fn heap_bytes(node: &TrieNode) -> usize {
-    // hashbrown stores one control byte per slot alongside each entry.
-    const SLOT: usize = std::mem::size_of::<(char, TrieNode)>() + 1;
-    node.children.capacity() * SLOT
+    node.children.capacity() * std::mem::size_of::<(char, TrieNode)>()
         + node.value.as_ref().map_or(0, String::capacity)
-        + node.children.values().map(heap_bytes).sum::<usize>()
+        + node.children.iter().map(|(_, c)| heap_bytes(c)).sum::<usize>()
 }
 
 impl Default for Trie {
