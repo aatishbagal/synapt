@@ -30,8 +30,19 @@
     },
     "macOSPrivateApi": true
   },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "pubkey": "",
+      "endpoints": [
+        "https://raw.githubusercontent.com/aatishbagal/synapt/main/updater.json"
+      ],
+      "dialog": false
+    }
+  },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "publisher": "Aatish Bagal",
     "copyright": "Copyright © 2026 Aatish Bagal",

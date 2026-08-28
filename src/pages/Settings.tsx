@@ -59,6 +59,22 @@ const dangerButton: React.CSSProperties = {
   border: '1px solid var(--border)',
 };
 
+/// An update offered by the endpoint, as returned by the check_for_update command.
+interface UpdateInfo {
+  version: string;
+  current: string;
+  notes: string;
+}
+
+/// Where the About section's update check has got to.
+type UpdateState =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'available'; info: UpdateInfo }
+  | { kind: 'none' }
+  | { kind: 'installing' }
+  | { kind: 'error'; message: string };
+
 const itemCard: React.CSSProperties = {
   backgroundColor: 'var(--surface)',
   border: '1px solid var(--border)',
@@ -145,6 +161,28 @@ export const Settings: React.FC = () => {
   // Null until a crash has actually been recorded, so the row stays hidden on
   // a healthy install.
   const [crashLogPath, setCrashLogPath] = useState<string | null>(null);
+
+  const [updateState, setUpdateState] = useState<UpdateState>({ kind: 'idle' });
+
+  const checkForUpdate = useCallback(async () => {
+    setUpdateState({ kind: 'checking' });
+    try {
+      const info = await invoke<UpdateInfo | null>('check_for_update');
+      setUpdateState(info ? { kind: 'available', info } : { kind: 'none' });
+    } catch (e) {
+      setUpdateState({ kind: 'error', message: `Update check failed: ${String(e)}` });
+    }
+  }, []);
+
+  const installUpdate = useCallback(async () => {
+    setUpdateState({ kind: 'installing' });
+    try {
+      // Succeeds by restarting into the new version, so nothing follows it.
+      await invoke('install_update');
+    } catch (e) {
+      setUpdateState({ kind: 'error', message: `Install failed: ${String(e)}` });
+    }
+  }, []);
 
   const loadTrusted = useCallback(async () => {
     setTrusted(await invoke<TrustedPeer[]>('get_trusted_peers').catch(() => []));
@@ -640,6 +678,54 @@ export const Settings: React.FC = () => {
                   ? `${ipcStatus.peer_count} peer(s) available for clipboard sync`
                   : 'Install SynaptClip to enable cross-device clipboard sync'}
               </p>
+              {/* Updates */}
+              <div className="flex flex-col gap-1 mt-1">
+                <button
+                  type="button"
+                  className="rounded px-2 py-1 text-xs self-start transition-colors"
+                  style={subtleButton}
+                  disabled={updateState.kind === 'checking' || updateState.kind === 'installing'}
+                  onClick={checkForUpdate}
+                >
+                  Check for updates
+                </button>
+                {updateState.kind === 'checking' && (
+                  <p className="text-xs" style={{ color: 'var(--muted)' }}>Checking...</p>
+                )}
+                {updateState.kind === 'none' && (
+                  <p className="text-xs" style={{ color: 'var(--muted)' }}>Up to date</p>
+                )}
+                {updateState.kind === 'installing' && (
+                  <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                    Downloading. Synapt will restart when it finishes.
+                  </p>
+                )}
+                {updateState.kind === 'error' && (
+                  <p className="text-xs break-all" style={{ color: 'var(--danger)' }}>
+                    {updateState.message}
+                  </p>
+                )}
+                {updateState.kind === 'available' && (
+                  <div className="flex flex-col gap-1">
+                    <p className="text-xs" style={{ color: 'var(--text)' }}>
+                      v{updateState.info.version} available
+                    </p>
+                    {updateState.info.notes && (
+                      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                        {updateState.info.notes}
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      className="rounded px-2 py-1 text-xs self-start transition-colors"
+                      style={accentButton}
+                      onClick={installUpdate}
+                    >
+                      Install and restart
+                    </button>
+                  </div>
+                )}
+              </div>
               {crashLogPath && (
                 <div className="flex flex-col gap-0.5 mt-1">
                   <p className="text-[11px] break-all" style={{ color: 'var(--muted)' }}>

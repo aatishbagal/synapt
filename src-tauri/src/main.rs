@@ -137,6 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .setup(move |app| {
             platform::setup_current();
@@ -401,6 +402,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::trigger_app_scan,
             commands::hide_window,
             commands::get_crash_log_path,
+            commands::check_for_update,
+            commands::install_update,
         ])
         .build(tauri::generate_context!())?
         .run(|_app, event| {
