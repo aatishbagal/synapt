@@ -225,6 +225,12 @@ async fn handle_responder(
     let shared_secret = ephemeral_dh(secret, &their_eph);
     let verify_code = pairing_code(&shared_secret);
 
+    // Fired before the event so the user learns about the request even when the
+    // overlay is hidden, in which case no webview is rendering to receive it.
+    if crate::notify::enabled(&db).await {
+        crate::notify::peer_pair_request(&app, &their_name);
+    }
+
     app.emit(
         "pair-request",
         serde_json::json!({
