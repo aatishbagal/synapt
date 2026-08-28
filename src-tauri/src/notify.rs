@@ -44,6 +44,15 @@ pub fn peer_paired(app: &AppHandle, peer_name: &str) {
     send(app, "Device paired", &format!("{peer_name} is now a trusted device"));
 }
 
+/// Notify that a newer version is available to install.
+pub fn update_available(app: &AppHandle, version: &str) {
+    send(
+        app,
+        "Update available",
+        &format!("Synapt {version} is ready to install. Open Settings to update."),
+    );
+}
+
 /// Notify that a trusted peer came online.
 pub fn peer_online(app: &AppHandle, peer_name: &str) {
     send(app, "Device online", &format!("{peer_name} is now available"));

@@ -7,6 +7,13 @@
   </picture>
 </p>
 
+<p align="center">
+  <a href="https://github.com/aatishbagal/synapt/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/aatishbagal/synapt?label=release&color=3b82f6"></a>
+  <a href="https://github.com/aatishbagal/synapt/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/aatishbagal/synapt/ci.yml?label=CI"></a>
+  <a href="https://github.com/aatishbagal/synapt/releases"><img alt="Total downloads" src="https://img.shields.io/github/downloads/aatishbagal/synapt/total?label=downloads&color=3b82f6"></a>
+  <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/aatishbagal/synapt?label=license"></a>
+</p>
+
 Synapt is a Spotlight-style launcher and LAN file utility — summon it with a global hotkey, search your files, and transfer them to trusted devices on your local network.
 
 ## Features

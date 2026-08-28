@@ -32,7 +32,6 @@ interface TransferHistory {
   completed_at: number | null;
 }
 
-const APP_VERSION = '0.5.1';
 const REPO_URL = 'https://github.com/aatishbagal/synapt';
 
 const inputStyle: React.CSSProperties = {
@@ -74,6 +73,24 @@ type UpdateState =
   | { kind: 'none' }
   | { kind: 'installing' }
   | { kind: 'error'; message: string };
+
+/// One-line status shown beside the update button.
+function updateStatusLabel(state: UpdateState): string {
+  switch (state.kind) {
+    case 'idle':
+      return 'Updates not checked yet';
+    case 'checking':
+      return 'Checking for updates...';
+    case 'none':
+      return 'Up to date';
+    case 'available':
+      return `Version ${state.info.version} available`;
+    case 'installing':
+      return 'Downloading, Synapt will restart when it finishes';
+    case 'error':
+      return `Could not check: ${state.message}`;
+  }
+}
 
 const itemCard: React.CSSProperties = {
   backgroundColor: 'var(--surface)',
@@ -162,7 +179,9 @@ export const Settings: React.FC = () => {
   // a healthy install.
   const [crashLogPath, setCrashLogPath] = useState<string | null>(null);
 
+  const [appVersion, setAppVersion] = useState('');
   const [updateState, setUpdateState] = useState<UpdateState>({ kind: 'idle' });
+  const [autoUpdate, setAutoUpdate] = useState(true);
 
   const checkForUpdate = useCallback(async () => {
     setUpdateState({ kind: 'checking' });
@@ -170,8 +189,21 @@ export const Settings: React.FC = () => {
       const info = await invoke<UpdateInfo | null>('check_for_update');
       setUpdateState(info ? { kind: 'available', info } : { kind: 'none' });
     } catch (e) {
-      setUpdateState({ kind: 'error', message: `Update check failed: ${String(e)}` });
+      setUpdateState({ kind: 'error', message: String(e) });
     }
+  }, []);
+
+  const busy = updateState.kind === 'checking' || updateState.kind === 'installing';
+  const statusTone =
+    updateState.kind === 'available'
+      ? 'var(--text)'
+      : updateState.kind === 'error'
+        ? 'var(--danger)'
+        : 'var(--muted)';
+
+  const toggleAutoUpdate = useCallback((enabled: boolean) => {
+    setAutoUpdate(enabled);
+    invoke('set_setting', { key: 'auto_update_check', value: String(enabled) }).catch(() => {});
   }, []);
 
   const installUpdate = useCallback(async () => {
@@ -204,6 +236,7 @@ export const Settings: React.FC = () => {
       setMaxResults(settings.max_results ?? '50');
       setIncludeHidden(settings.include_hidden === 'true');
       setNotifications(settings.notifications_enabled !== 'false');
+      setAutoUpdate(settings.auto_update_check !== 'false');
       setDownloadDir(settings.download_dir ?? '');
       setHotkey(settings.hotkey ?? 'ctrl+space');
       const t = settings.theme ?? 'dark';
@@ -212,6 +245,13 @@ export const Settings: React.FC = () => {
 
       setAutostart(await invoke<boolean>('get_autostart').catch(() => false));
       setCrashLogPath(await invoke<string | null>('get_crash_log_path').catch(() => null));
+      setAppVersion(await invoke<string>('get_app_version').catch(() => ''));
+
+      // Check on open when the preference allows it, so the section shows real
+      // status rather than an inert button waiting to be clicked.
+      if (settings.auto_update_check !== 'false') {
+        void checkForUpdate();
+      }
       setIpcStatus(await invoke<IpcStatus>('get_ipc_status').catch(() => ({ api_active: false, synaptclip_present: false, peer_count: 0 })));
 
       await loadTrusted();
@@ -222,7 +262,18 @@ export const Settings: React.FC = () => {
       setIndexStatus(running ? 'Index scan running...' : null);
       setHistory(await invoke<TransferHistory[]>('get_transfer_history').catch(() => []));
     })();
-  }, [loadTrusted, loadSharedDirs, loadIndexedDirs]);
+  }, [loadTrusted, loadSharedDirs, loadIndexedDirs, checkForUpdate]);
+
+  // The startup check runs in the background, so surface its result if Settings
+  // happens to be open when it lands.
+  useEffect(() => {
+    const unlisten = listen<UpdateInfo>('update-available', event => {
+      setUpdateState({ kind: 'available', info: event.payload });
+    });
+    return () => {
+      unlisten.then(fn => fn()).catch(() => undefined);
+    };
+  }, []);
 
   // Reflect live indexing progress in the Indexed Directories status line.
   useEffect(() => {
@@ -641,7 +692,7 @@ export const Settings: React.FC = () => {
         <Section title="About">
           <div className="flex flex-col gap-1 px-3 py-2 rounded" style={itemCard}>
             <p className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>Synapt</p>
-            <p className="text-xs" style={{ color: 'var(--muted)' }}>Version {APP_VERSION}</p>
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>Version {appVersion}</p>
             <p className="text-xs" style={{ color: 'var(--muted)' }}>Apache License 2.0</p>
             <a href={REPO_URL} target="_blank" rel="noreferrer" className="text-xs" style={{ color: 'var(--accent)' }}>
               {REPO_URL}
@@ -679,52 +730,56 @@ export const Settings: React.FC = () => {
                   : 'Install SynaptClip to enable cross-device clipboard sync'}
               </p>
               {/* Updates */}
-              <div className="flex flex-col gap-1 mt-1">
-                <button
-                  type="button"
-                  className="rounded px-2 py-1 text-xs self-start transition-colors"
-                  style={subtleButton}
-                  disabled={updateState.kind === 'checking' || updateState.kind === 'installing'}
-                  onClick={checkForUpdate}
-                >
-                  Check for updates
-                </button>
-                {updateState.kind === 'checking' && (
-                  <p className="text-xs" style={{ color: 'var(--muted)' }}>Checking...</p>
-                )}
-                {updateState.kind === 'none' && (
-                  <p className="text-xs" style={{ color: 'var(--muted)' }}>Up to date</p>
-                )}
-                {updateState.kind === 'installing' && (
-                  <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                    Downloading. Synapt will restart when it finishes.
-                  </p>
-                )}
-                {updateState.kind === 'error' && (
-                  <p className="text-xs break-all" style={{ color: 'var(--danger)' }}>
-                    {updateState.message}
-                  </p>
-                )}
-                {updateState.kind === 'available' && (
-                  <div className="flex flex-col gap-1">
-                    <p className="text-xs" style={{ color: 'var(--text)' }}>
-                      v{updateState.info.version} available
-                    </p>
-                    {updateState.info.notes && (
-                      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
-                        {updateState.info.notes}
-                      </p>
-                    )}
+              <div
+                className="flex flex-col gap-2 mt-1 pt-2"
+                style={{ borderTop: '1px solid var(--border)' }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-2 min-w-0">
+                    {busy && <UnderlineLoader state="active" width={16} />}
+                    <span className="text-xs truncate" style={{ color: statusTone }}>
+                      {updateStatusLabel(updateState)}
+                    </span>
+                  </span>
+                  {updateState.kind === 'available' ? (
                     <button
                       type="button"
-                      className="rounded px-2 py-1 text-xs self-start transition-colors"
-                      style={accentButton}
                       onClick={installUpdate}
+                      className="rounded px-2 py-1 text-xs shrink-0 transition-colors"
+                      style={accentButton}
                     >
                       Install and restart
                     </button>
-                  </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={checkForUpdate}
+                      disabled={busy}
+                      className="rounded px-2 py-1 text-xs shrink-0 transition-colors"
+                      style={{ ...subtleButton, opacity: busy ? 0.5 : 1 }}
+                    >
+                      {updateState.kind === 'idle' ? 'Check for updates' : 'Check again'}
+                    </button>
+                  )}
+                </div>
+
+                {updateState.kind === 'available' && updateState.info.notes && (
+                  <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                    {updateState.info.notes}
+                  </p>
                 )}
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoUpdate}
+                    onChange={e => toggleAutoUpdate(e.target.checked)}
+                    style={{ accentColor: 'var(--accent)' }}
+                  />
+                  <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                    Check for updates automatically
+                  </span>
+                </label>
               </div>
               {crashLogPath && (
                 <div className="flex flex-col gap-0.5 mt-1">

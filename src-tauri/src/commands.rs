@@ -1,4 +1,5 @@
 use std::sync::MutexGuard;
+use tauri::Emitter;
 
 /// Lock a std mutex, recovering the guard if a holder thread panicked.
 fn lock<T>(m: &std::sync::Mutex<T>) -> MutexGuard<'_, T> {
@@ -912,8 +913,47 @@ pub async fn remote_launch_app(
     }
 }
 
+/// Version of the running build.
+///
+/// Served from the binary so the UI never carries a copy that can drift from
+/// Cargo.toml and tauri.conf.json.
+#[tauri::command]
+pub fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+/// Whether automatic update checks are enabled. Defaults to true when unset.
+pub async fn auto_update_enabled(db: &crate::storage::Db) -> bool {
+    db.get_setting("auto_update_check").await.ok().flatten().as_deref() != Some("false")
+}
+
+/// Run the startup update check, when the setting allows it.
+///
+/// Emits `update-available` so an open Settings window can show the result
+/// without the user asking, and notifies as well, since at launch they are
+/// unlikely to be looking at Settings at all.
+pub async fn run_auto_update_check(app: &tauri::AppHandle, db: &crate::storage::Db) {
+    if !auto_update_enabled(db).await {
+        tracing::debug!("automatic update check is disabled");
+        return;
+    }
+    match check_for_update(app.clone()).await {
+        Ok(Some(info)) => {
+            tracing::info!("update available: v{}", info.version);
+            if crate::notify::enabled(db).await {
+                crate::notify::update_available(app, &info.version);
+            }
+            if let Err(e) = app.emit("update-available", &info) {
+                tracing::warn!("could not emit update-available: {e}");
+            }
+        }
+        Ok(None) => tracing::info!("update check: already up to date"),
+        Err(e) => tracing::warn!("update check failed: {e}"),
+    }
+}
+
 /// An available update, as shown in the About section.
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 pub struct UpdateInfo {
     /// Version offered by the update endpoint.
     pub version: String,

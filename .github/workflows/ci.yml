@@ -1,0 +1,85 @@
+name: CI
+
+# Runs only on pull requests into main, as the merge gate. Compiles, lints,
+# tests, and builds the frontend (debug build only — no bundling). Direct pushes
+# to dev do not trigger any build; releases are cut from main by release.yml.
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      # The Synapt app lives in this repo; synapt-core is a sibling repo that
+      # src-tauri/Cargo.toml references via path = "../../synapt-core". Checking
+      # both out side by side reproduces the local directory layout so the path
+      # dependency resolves.
+      - name: Checkout synapt
+        uses: actions/checkout@v4
+        with:
+          path: synapt
+
+      - name: Checkout synapt-core
+        uses: actions/checkout@v4
+        with:
+          repository: aatishbagal/synapt-core
+          path: synapt-core
+          # If synapt-core is PRIVATE, the default GITHUB_TOKEN cannot read it.
+          # Create a fine-grained PAT with read access to synapt-core, store it
+          # as a repo secret named SYNAPT_CORE_TOKEN, and uncomment the next line.
+          # token: ${{ secrets.SYNAPT_CORE_TOKEN }}
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            libssl-dev \
+            libxdo-dev \
+            file \
+            wget
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: synapt/package-lock.json
+
+      - name: Set up Rust
+        # Pinned for reproducible clippy: floating @stable lets new clippy
+        # releases introduce lints that break -D warnings with no code change.
+        uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          components: clippy
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: synapt/src-tauri
+
+      - name: Install frontend dependencies
+        working-directory: synapt
+        run: npm ci
+
+      - name: Clippy
+        working-directory: synapt/src-tauri
+        run: cargo clippy -- -D warnings
+
+      - name: Test
+        working-directory: synapt/src-tauri
+        run: cargo test
+
+      - name: Frontend build
+        working-directory: synapt
+        run: npm run build
+
+      - name: Debug build
+        working-directory: synapt/src-tauri
+        run: cargo build
