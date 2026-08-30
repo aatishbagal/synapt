@@ -87,6 +87,87 @@ pub async fn begin_pairing_cmd(
     Ok(code)
 }
 
+/// Invite code plus the address it encodes, for display on the host device.
+#[derive(serde::Serialize)]
+pub struct InviteCodeInfo {
+    pub code:         String,
+    pub local_ip:     String,
+    pub pairing_port: u16,
+}
+
+/// Generate an invite code naming this device, for the user to read out or paste.
+#[tauri::command]
+pub fn generate_invite_code() -> Result<InviteCodeInfo, String> {
+    let local_ip = crate::network::manual_pair::get_local_ip()
+        .ok_or_else(|| "Could not determine this device's local IP address".to_string())?;
+    Ok(InviteCodeInfo {
+        code: crate::network::manual_pair::encode_invite(
+            local_ip,
+            crate::network::PAIRING_PORT,
+        ),
+        local_ip: local_ip.to_string(),
+        pairing_port: crate::network::PAIRING_PORT,
+    })
+}
+
+/// This device's local IP address, for display in the manual pairing UI.
+#[tauri::command]
+pub fn get_local_ip() -> Option<String> {
+    crate::network::manual_pair::get_local_ip().map(|ip| ip.to_string())
+}
+
+/// Begin pairing with the device an invite code names.
+///
+/// Runs the same ceremony as `begin_pairing_cmd`; only the way the address is
+/// obtained differs. Returns the verification code for the user to compare.
+#[tauri::command]
+pub async fn redeem_invite_code(
+    code: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<String, String> {
+    let (ip, port) = crate::network::manual_pair::decode_invite(&code)
+        .ok_or_else(|| "That invite code is not valid. Check it and try again.".to_string())?;
+    start_manual_pairing(std::net::IpAddr::V4(ip), port, &state).await
+}
+
+/// Begin pairing with a device at a manually entered IP address.
+///
+/// Returns the verification code for the user to compare.
+#[tauri::command]
+pub async fn pair_by_ip(
+    ip: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<String, String> {
+    let ip_addr: std::net::IpAddr = ip
+        .trim()
+        .parse()
+        .map_err(|_| format!("Not a valid IP address: {}", ip.trim()))?;
+    start_manual_pairing(ip_addr, crate::network::PAIRING_PORT, &state).await
+}
+
+/// Shared body of the manual pairing commands: dial the address, park the
+/// pending pairing, and hand the verification code back to the UI.
+async fn start_manual_pairing(
+    ip: std::net::IpAddr,
+    port: u16,
+    state: &tauri::State<'_, crate::AppState>,
+) -> Result<String, String> {
+    let pending = {
+        let identity = state.identity.read().await;
+        crate::network::peer::begin_pairing(ip, port, &identity)
+            .await
+            .map_err(|e| match e {
+                crate::network::peer::PairingError::Timeout => format!(
+                    "Could not reach {ip}. Check the address and make sure Synapt is running on the other device."
+                ),
+                other => other.to_string(),
+            })?
+    };
+    let code = pending.verify_code.clone();
+    *state.pending_pair.lock().await = Some(pending);
+    Ok(code)
+}
+
 /// Confirm a pending outbound pairing after the user verified the code.
 #[tauri::command]
 pub async fn confirm_pairing_cmd(

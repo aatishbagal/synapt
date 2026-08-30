@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { ArrowLeft } from 'lucide-react';
-import { IndexProgress, IpcStatus, TrustedPeer } from '../types';
+import { IndexProgress, InviteCodeInfo, IpcStatus, TrustedPeer } from '../types';
+import { PairingDialog } from '../components/PairingDialog';
 import { useTheme } from '../hooks/useTheme';
 import { Select } from '../components/Select';
 import { UnderlineLoader } from '../components/UnderlineLoader';
@@ -32,7 +33,43 @@ interface TransferHistory {
   completed_at: number | null;
 }
 
+interface IncomingPair {
+  device_id: string;
+  device_name: string;
+  verify_code: string;
+}
+
 const REPO_URL = 'https://github.com/aatishbagal/synapt';
+
+/// Milliseconds to wait for the other device before giving up on a manual pair.
+const PAIR_TIMEOUT_MS = 10000;
+
+const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+
+/// True when the text is a syntactically valid IPv4 address, so the entry field
+/// can route it to pair_by_ip rather than treating it as an invite code.
+function looksLikeIpv4(text: string): boolean {
+  const m = IPV4_RE.exec(text.trim());
+  return m !== null && m.slice(1).every(part => Number(part) <= 255);
+}
+
+/// Strip formatting from a typed invite code, leaving the alphabet characters.
+function normalizeInviteCode(text: string): string {
+  return text.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+/// True for the RFC 1918 ranges a home or office LAN normally uses. Anything
+/// else is worth warning about, since the two devices are likely not on one
+/// subnet and the pairing connection will not get through.
+function isPrivateLanIp(ip: string): boolean {
+  const m = IPV4_RE.exec(ip.trim());
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  if (a === 192 && b === 168) return true;
+  if (a === 10) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  return false;
+}
 
 const inputStyle: React.CSSProperties = {
   backgroundColor: 'var(--surface)',
@@ -179,6 +216,17 @@ export const Settings: React.FC = () => {
   // a healthy install.
   const [crashLogPath, setCrashLogPath] = useState<string | null>(null);
 
+  // --- Add Device (manual pairing) ---
+  const [pairTab, setPairTab] = useState<'enter' | 'show'>('enter');
+  const [pairInput, setPairInput] = useState('');
+  const [pairBusy, setPairBusy] = useState(false);
+  const [pairError, setPairError] = useState('');
+  const [localIp, setLocalIp] = useState<string | null>(null);
+  const [inviteInfo, setInviteInfo] = useState<InviteCodeInfo | null>(null);
+  const [inviteError, setInviteError] = useState('');
+  const [manualVerify, setManualVerify] = useState<string | null>(null);
+  const [incomingPair, setIncomingPair] = useState<IncomingPair | null>(null);
+
   const [appVersion, setAppVersion] = useState('');
   const [updateState, setUpdateState] = useState<UpdateState>({ kind: 'idle' });
   const [autoUpdate, setAutoUpdate] = useState(true);
@@ -213,6 +261,16 @@ export const Settings: React.FC = () => {
       await invoke('install_update');
     } catch (e) {
       setUpdateState({ kind: 'error', message: `Install failed: ${String(e)}` });
+    }
+  }, []);
+
+  const loadInviteCode = useCallback(async () => {
+    try {
+      setInviteInfo(await invoke<InviteCodeInfo>('generate_invite_code'));
+      setInviteError('');
+    } catch (e) {
+      setInviteInfo(null);
+      setInviteError(String(e));
     }
   }, []);
 
@@ -261,8 +319,27 @@ export const Settings: React.FC = () => {
       setIndexActive(running);
       setIndexStatus(running ? 'Index scan running...' : null);
       setHistory(await invoke<TransferHistory[]>('get_transfer_history').catch(() => []));
+      setLocalIp(await invoke<string | null>('get_local_ip').catch(() => null));
     })();
   }, [loadTrusted, loadSharedDirs, loadIndexedDirs, checkForUpdate]);
+
+  // The code is generated lazily so a user who never opens the tab does not pay
+  // for an interface lookup, and so returning to the tab reflects a changed IP.
+  useEffect(() => {
+    if (pairTab === 'show' && inviteInfo === null) {
+      void loadInviteCode();
+    }
+  }, [pairTab, inviteInfo, loadInviteCode]);
+
+  // Responder side. The overlay carries this listener too, but it is unmounted
+  // while Settings is open, which is exactly where the user sits waiting for
+  // someone to redeem their code.
+  useEffect(() => {
+    const unlisten = listen<IncomingPair>('pair-request', e => setIncomingPair(e.payload));
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, []);
 
   // The startup check runs in the background, so surface its result if Settings
   // happens to be open when it lands.
@@ -332,6 +409,50 @@ export const Settings: React.FC = () => {
     } catch (e) {
       setDeviceNameError(String(e));
     }
+  };
+
+  // --- Add Device (manual pairing) ---
+  // The joining side dials the other device. The address may be typed as a raw
+  // IPv4 address or as an invite code, so the field accepts either.
+  const startManualPair = async () => {
+    const entry = pairInput.trim();
+    if (entry.length === 0 || pairBusy) return;
+
+    setPairBusy(true);
+    setPairError('');
+
+    const request = looksLikeIpv4(entry)
+      ? invoke<string>('pair_by_ip', { ip: entry })
+      : invoke<string>('redeem_invite_code', { code: normalizeInviteCode(entry) });
+
+    // begin_pairing has its own connect timeout, but a host that accepts the
+    // TCP connection and then stalls would otherwise leave the button spinning.
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error(
+              'Could not reach that device. Check the address and make sure Synapt is running on the other device.',
+            ),
+          ),
+        PAIR_TIMEOUT_MS,
+      ),
+    );
+
+    try {
+      const verify = await Promise.race([request, timeout]);
+      setManualVerify(verify);
+      setPairInput('');
+    } catch (e) {
+      setPairError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPairBusy(false);
+    }
+  };
+
+  const closeManualPair = () => {
+    setManualVerify(null);
+    void loadTrusted();
   };
 
   // --- Trusted Devices ---
@@ -522,7 +643,107 @@ export const Settings: React.FC = () => {
           )}
         </Section>
 
-        {/* 3. Shared Directories */}
+        {/* 3. Add Device */}
+        <Section title="Add Device">
+          <div className="flex gap-1">
+            {(['enter', 'show'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setPairTab(tab)}
+                className="rounded px-2 py-1 text-xs transition-colors"
+                style={pairTab === tab ? accentButton : subtleButton}
+              >
+                {tab === 'enter' ? 'Enter IP or code' : 'Show my code'}
+              </button>
+            ))}
+          </div>
+
+          {pairTab === 'enter' ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs" style={{ color: 'var(--muted)', fontFamily: 'monospace' }}>
+                This device IP: {localIp ?? 'unavailable'}
+              </p>
+              <div className="flex gap-2">
+                <input
+                  value={pairInput}
+                  onChange={e => {
+                    setPairInput(e.target.value);
+                    setPairError('');
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') void startManualPair();
+                  }}
+                  placeholder="IP address or invite code"
+                  spellCheck={false}
+                  autoCapitalize="characters"
+                  className="flex-1 rounded px-2 py-1 text-xs outline-none"
+                  style={inputStyle}
+                />
+                <button
+                  onClick={() => void startManualPair()}
+                  disabled={pairBusy || pairInput.trim().length === 0}
+                  className="rounded px-2 py-1 text-xs shrink-0 transition-colors disabled:opacity-50"
+                  style={accentButton}
+                >
+                  {pairBusy ? 'Connecting...' : 'Connect and Pair'}
+                </button>
+              </div>
+              {pairError && (
+                <p className="text-xs" style={{ color: 'var(--danger)' }}>{pairError}</p>
+              )}
+              <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                Enter the IP address shown on the other device, or paste their invite code.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {inviteError ? (
+                <p className="text-xs" style={{ color: 'var(--danger)' }}>{inviteError}</p>
+              ) : (
+                <p
+                  className="text-center"
+                  style={{
+                    fontFamily: 'monospace',
+                    fontSize: '28px',
+                    letterSpacing: '0.15em',
+                    color: 'var(--text)',
+                    backgroundColor: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    padding: '16px 24px',
+                  }}
+                >
+                  {inviteInfo?.code ?? '...'}
+                </p>
+              )}
+              {inviteInfo && (
+                <>
+                  <p className="text-xs" style={{ color: 'var(--muted)', fontFamily: 'monospace' }}>
+                    This device IP: {inviteInfo.local_ip}
+                  </p>
+                  <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                    Share this code or your IP with the other device to start pairing.
+                  </p>
+                  {!isPrivateLanIp(inviteInfo.local_ip) && (
+                    <p className="text-[11px]" style={{ color: 'var(--warning)' }}>
+                      Your device may be on an unusual network. If pairing fails, check that both
+                      devices are on the same Wi-Fi network.
+                    </p>
+                  )}
+                </>
+              )}
+              <button
+                onClick={() => void loadInviteCode()}
+                className="text-[11px] self-start transition-colors"
+                style={{ color: 'var(--muted)', background: 'none', border: 'none', padding: 0 }}
+              >
+                Generate new code
+              </button>
+            </div>
+          )}
+        </Section>
+
+        {/* 4. Shared Directories */}
         <Section
           title="Shared Directories"
           action={<button onClick={addSharedDir} className="rounded px-2 py-1 text-xs transition-colors" style={subtleButton}>Add</button>}
@@ -544,7 +765,7 @@ export const Settings: React.FC = () => {
           <p className="text-xs" style={{ color: 'var(--muted)' }}>Trusted peers can only access files in these directories.</p>
         </Section>
 
-        {/* 4. Indexed Directories */}
+        {/* 5. Indexed Directories */}
         <Section
           title="Indexed Directories"
           action={
@@ -584,7 +805,7 @@ export const Settings: React.FC = () => {
           <p className="text-xs" style={{ color: 'var(--muted)' }}>These directories are indexed for local file search.</p>
         </Section>
 
-        {/* 5. Hotkey */}
+        {/* 6. Hotkey */}
         <Section title="Hotkey">
           <div className="flex items-center justify-between px-3 py-2" style={itemCard}>
             <p className="text-xs" style={{ color: 'var(--text)', fontFamily: 'monospace' }}>
@@ -600,7 +821,7 @@ export const Settings: React.FC = () => {
           </div>
         </Section>
 
-        {/* 6. Preferences */}
+        {/* 7. Preferences */}
         <Section title="Preferences">
           <div className="flex flex-col gap-3 px-3 py-2 rounded" style={itemCard}>
             <div className="flex items-center justify-between gap-2">
@@ -673,7 +894,7 @@ export const Settings: React.FC = () => {
           </div>
         </Section>
 
-        {/* 7. Transfer History */}
+        {/* 8. Transfer History */}
         <Section title="Transfers">
           <button
             type="button"
@@ -688,7 +909,7 @@ export const Settings: React.FC = () => {
           </button>
         </Section>
 
-        {/* 8. About */}
+        {/* 9. About */}
         <Section title="About">
           <div className="flex flex-col gap-1 px-3 py-2 rounded" style={itemCard}>
             <p className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>Synapt</p>
@@ -802,6 +1023,21 @@ export const Settings: React.FC = () => {
           </div>
         </Section>
       </div>
+
+      {manualVerify !== null && (
+        <PairingDialog mode="manual" verifyCode={manualVerify} onClose={closeManualPair} />
+      )}
+
+      {incomingPair && (
+        <PairingDialog
+          mode="responder"
+          incomingPair={incomingPair}
+          onClose={() => {
+            setIncomingPair(null);
+            void loadTrusted();
+          }}
+        />
+      )}
     </div>
   );
 };
