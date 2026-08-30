@@ -208,8 +208,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let db2 = Arc::clone(&db);
             let id2 = Arc::clone(&identity);
             let tx2 = Arc::clone(&pair_tx);
+            let ti2 = Arc::clone(&trusted_ids);
             tokio::spawn(async move {
-                if let Err(e) = network::peer::start_pairing_server(id2, db2, handle, tx2).await {
+                if let Err(e) =
+                    network::peer::start_pairing_server(id2, db2, handle, tx2, ti2).await
+                {
                     tracing::error!("pairing server error: {}", e);
                 }
             });

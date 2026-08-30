@@ -100,13 +100,22 @@ async fn health_handler() -> Json<HealthResponse> {
     })
 }
 
-/// Build the GET /v1/peers response body from a peer snapshot. Every peer in the
-/// discovery map is currently reachable — stale entries are evicted by discovery,
-/// so `online` is always true and `last_seen` reflects the snapshot time.
-fn peers_response(peers: &[synapt_core::Peer]) -> serde_json::Value {
+/// Build the GET /v1/peers response body from a peer snapshot, keeping only peers
+/// that are both trusted and online.
+///
+/// Trusted means the device completed the pairing ceremony and is in the trust
+/// store; online means discovery still holds a presence entry for it, since stale
+/// entries are evicted on timeout. Untrusted peers are excluded because Synapt has
+/// no session key for them, so any clip send SynaptClip attempted would fail.
+/// `online` is therefore always true and `last_seen` reflects the snapshot time.
+fn peers_response(
+    peers: &[synapt_core::Peer],
+    trusted_ids: &HashSet<String>,
+) -> serde_json::Value {
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     let peer_list: Vec<serde_json::Value> = peers
         .iter()
+        .filter(|p| trusted_ids.contains(&p.device_id.to_string()))
         .map(|p| {
             serde_json::json!({
                 "id":        p.device_id.to_string(),
@@ -126,8 +135,12 @@ fn peers_response(peers: &[synapt_core::Peer]) -> serde_json::Value {
 }
 
 async fn peers_handler(State(state): State<IpcState>) -> Json<serde_json::Value> {
+    let trusted_ids = match state.trusted_ids.lock() {
+        Ok(guard) => guard.clone(),
+        Err(poisoned) => poisoned.into_inner().clone(),
+    };
     let peers = crate::network::list_peers(&state.peer_map);
-    Json(peers_response(&peers))
+    Json(peers_response(&peers, &trusted_ids))
 }
 
 /// Body of POST /v1/clips/send. Fields default to empty so a body missing a field
@@ -324,15 +337,63 @@ mod tests {
 
     #[test]
     fn peers_handler_returns_api_version_one() {
-        let body = peers_response(&[]);
+        let body = peers_response(&[], &HashSet::new());
         assert_eq!(body["api_version"], "1");
     }
 
     #[test]
     fn peers_handler_empty_map_returns_empty_array() {
-        let body = peers_response(&[]);
+        let body = peers_response(&[], &HashSet::new());
         let arr = body["peers"].as_array().expect("peers must be an array");
         assert!(arr.is_empty());
+    }
+
+    /// Build an online discovery peer with a fixed id for the trust-filter tests.
+    fn online_peer(device_id: uuid::Uuid) -> synapt_core::Peer {
+        synapt_core::Peer {
+            device_id,
+            device_name: "Test Device".into(),
+            ip: "192.168.1.42".parse().expect("literal is a valid IP"),
+            pairing_port: crate::network::PAIRING_PORT,
+            status: synapt_core::PeerStatus::Discovered,
+        }
+    }
+
+    #[test]
+    fn peers_handler_omits_online_peer_that_is_not_trusted() {
+        let peer = online_peer(uuid::Uuid::nil());
+        let body = peers_response(&[peer], &HashSet::new());
+        let arr = body["peers"].as_array().expect("peers must be an array");
+        assert!(
+            arr.is_empty(),
+            "an online but unpaired peer must not be advertised to SynaptClip"
+        );
+    }
+
+    #[test]
+    fn peers_handler_returns_peer_that_is_both_online_and_trusted() {
+        let id = uuid::Uuid::nil();
+        let trusted: HashSet<String> = std::iter::once(id.to_string()).collect();
+        let body = peers_response(&[online_peer(id)], &trusted);
+        let arr = body["peers"].as_array().expect("peers must be an array");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["id"], id.to_string());
+        assert_eq!(arr[0]["online"], true);
+        assert_eq!(arr[0]["port"], crate::network::TRANSFER_PORT);
+    }
+
+    #[test]
+    fn peers_handler_keeps_only_the_trusted_peer_of_a_mixed_set() {
+        let trusted_id = uuid::Uuid::from_u128(1);
+        let stranger_id = uuid::Uuid::from_u128(2);
+        let trusted: HashSet<String> = std::iter::once(trusted_id.to_string()).collect();
+        let body = peers_response(
+            &[online_peer(trusted_id), online_peer(stranger_id)],
+            &trusted,
+        );
+        let arr = body["peers"].as_array().expect("peers must be an array");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["id"], trusted_id.to_string());
     }
 
     fn empty_state() -> (crate::network::PeerMap, Arc<Mutex<HashSet<String>>>) {
