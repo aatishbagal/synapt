@@ -85,3 +85,10 @@ export interface IpcStatus {
   synaptclip_present: boolean;
   peer_count: number;
 }
+
+/// Invite code for manual pairing, plus the address it encodes.
+export interface InviteCodeInfo {
+  code:         string;
+  local_ip:     string;
+  pairing_port: number;
+}

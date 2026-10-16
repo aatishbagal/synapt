@@ -3,6 +3,7 @@ pub mod crypto;
 pub mod transfer;
 pub mod queue;
 pub mod peer;
+pub mod manual_pair;
 pub mod search_server;
 
 use rand::rngs::OsRng;

@@ -10,9 +10,14 @@ interface IncomingPair {
 }
 
 interface Props {
-  mode: 'initiator' | 'responder';
+  /// 'manual' is the initiator side of manual pairing: the caller has already
+  /// run begin_pairing via pair_by_ip or redeem_invite_code, so the dialog opens
+  /// straight on the verification step with the code that call returned.
+  mode: 'initiator' | 'responder' | 'manual';
   peer?: Peer;
   incomingPair?: IncomingPair;
+  verifyCode?: string;
+  peerLabel?: string;
   onClose: () => void;
 }
 
@@ -41,10 +46,25 @@ function formatCode(code: string): string {
   return code.length === 8 ? `${code.slice(0, 4)} ${code.slice(4)}` : code;
 }
 
-export const PairingDialog: React.FC<Props> = ({ mode, peer, incomingPair, onClose }) => {
-  const [step, setStep] = useState<Step>(mode === 'initiator' ? 'connecting' : 'prompt');
-  const [code, setCode] = useState<string>(incomingPair?.verify_code ?? '');
-  const [pairedName, setPairedName] = useState<string>(incomingPair?.device_name ?? '');
+function initialStep(mode: Props['mode']): Step {
+  if (mode === 'initiator') return 'connecting';
+  if (mode === 'manual') return 'verify';
+  return 'prompt';
+}
+
+export const PairingDialog: React.FC<Props> = ({
+  mode,
+  peer,
+  incomingPair,
+  verifyCode,
+  peerLabel,
+  onClose,
+}) => {
+  const [step, setStep] = useState<Step>(initialStep(mode));
+  const [code, setCode] = useState<string>(verifyCode ?? incomingPair?.verify_code ?? '');
+  const [pairedName, setPairedName] = useState<string>(
+    peerLabel ?? incomingPair?.device_name ?? '',
+  );
   const [errorMsg, setErrorMsg] = useState<string>('');
 
   useEffect(() => {

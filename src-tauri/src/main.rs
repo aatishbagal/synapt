@@ -208,8 +208,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let db2 = Arc::clone(&db);
             let id2 = Arc::clone(&identity);
             let tx2 = Arc::clone(&pair_tx);
+            let ti2 = Arc::clone(&trusted_ids);
             tokio::spawn(async move {
-                if let Err(e) = network::peer::start_pairing_server(id2, db2, handle, tx2).await {
+                if let Err(e) =
+                    network::peer::start_pairing_server(id2, db2, handle, tx2, ti2).await
+                {
                     tracing::error!("pairing server error: {}", e);
                 }
             });
@@ -370,6 +373,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::get_peers,
             commands::get_trusted_peers,
             commands::begin_pairing_cmd,
+            commands::generate_invite_code,
+            commands::redeem_invite_code,
+            commands::pair_by_ip,
+            commands::get_local_ip,
             commands::confirm_pairing_cmd,
             commands::accept_pair_cmd,
             commands::reject_pair_cmd,
