@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Synapt
+Exec=synapt
+Icon=synapt
+Terminal=false
+NoDisplay=true
+Categories=Utility;

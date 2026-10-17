@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import { IndexProgress, InviteCodeInfo, IpcStatus, TrustedPeer } from '../types';
 import { PairingDialog } from '../components/PairingDialog';
 import { useTheme } from '../hooks/useTheme';
+import { useHotkeyInfo } from '../hooks/useHotkeyInfo';
 import { Select } from '../components/Select';
 import { UnderlineLoader } from '../components/UnderlineLoader';
 
@@ -197,6 +198,8 @@ export const Settings: React.FC = () => {
   const [indexActive, setIndexActive] = useState(false);
 
   const [hotkey, setHotkey] = useState('ctrl+space');
+  const shortcut = useHotkeyInfo();
+  const [hotkeyError, setHotkeyError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
 
   const [downloadDir, setDownloadDir] = useState('');
@@ -519,11 +522,12 @@ export const Settings: React.FC = () => {
       const combo = pendingHotkey.current;
       if (!combo) return;
       pendingHotkey.current = null;
+      setHotkeyError(null);
       try {
         await invoke('set_hotkey', { hotkey: combo });
         setHotkey(combo);
-      } catch {
-        /* keep the previous hotkey if the new one fails to register */
+      } catch (error) {
+        setHotkeyError(String(error));
       }
       setRecording(false);
     };
@@ -809,16 +813,32 @@ export const Settings: React.FC = () => {
         <Section title="Hotkey">
           <div className="flex items-center justify-between px-3 py-2" style={itemCard}>
             <p className="text-xs" style={{ color: 'var(--text)', fontFamily: 'monospace' }}>
-              {recording ? 'Press any key...' : prettyHotkey(hotkey)}
+              {shortcut.info?.wayland
+                ? shortcut.info.trigger ?? 'Shortcut not active'
+                : recording ? 'Press any key...' : prettyHotkey(hotkey)}
             </p>
             <button
-              onClick={() => setRecording(r => !r)}
+              disabled={shortcut.busy || shortcut.info === null}
+              onClick={() => {
+                if (shortcut.info?.wayland) void shortcut.configure();
+                else setRecording(r => !r);
+              }}
               className="rounded px-2 py-1 text-xs shrink-0 ml-2 transition-colors"
               style={recording ? accentButton : subtleButton}
             >
-              {recording ? 'Press any key...' : 'Change'}
+              {shortcut.busy ? 'Waiting for desktop...' : shortcut.info?.wayland ? 'Configure shortcut' : recording ? 'Press any key...' : 'Change'}
             </button>
           </div>
+          {shortcut.info?.wayland && (
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>
+              Your desktop manages this shortcut and may ask for permission.
+            </p>
+          )}
+          {(shortcut.error || shortcut.info?.error || hotkeyError) && (
+            <p className="text-xs" style={{ color: 'var(--danger)' }}>
+              {shortcut.error || shortcut.info?.error || hotkeyError}
+            </p>
+          )}
         </Section>
 
         {/* 7. Preferences */}

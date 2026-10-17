@@ -531,24 +531,10 @@ pub async fn set_hotkey(
     state: tauri::State<'_, crate::AppState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    use tauri::Manager;
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-
-    app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
-    app.global_shortcut()
-        .on_shortcut(hotkey.as_str(), |app, _shortcut, event| {
-            if event.state == ShortcutState::Pressed {
-                if let Some(window) = app.get_webview_window("main") {
-                    if window.is_visible().unwrap_or(false) {
-                        let _ = window.hide();
-                    } else {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
-                }
-            }
-        })
-        .map_err(|e| e.to_string())?;
+    if crate::hotkey::uses_portal() {
+        return Err("Change this shortcut through desktop shortcut settings".into());
+    }
+    crate::hotkey::register_hotkey(&app, &hotkey).await?;
 
     state.db.set_setting("hotkey", &hotkey).await.map_err(|e| e.to_string())?;
     Ok(())
@@ -1131,6 +1117,23 @@ pub fn log_memory_snapshot(phase: &str, engine: &crate::search::engine::SearchEn
         crate::search::app_indexer::icons_extracted(),
         process,
     );
+}
+
+/// Return the effective shortcut binding and any backend failure.
+#[tauri::command]
+pub fn get_hotkey_info(app: tauri::AppHandle) -> crate::hotkey::HotkeyInfo {
+    crate::hotkey::info(&app)
+}
+
+/// Configure a Wayland shortcut through the desktop's consent interface.
+#[tauri::command]
+pub async fn configure_hotkey(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<(), String> {
+    let hotkey = state.db.get_setting("hotkey").await.map_err(|e| e.to_string())?
+        .unwrap_or_else(|| crate::hotkey::DEFAULT_HOTKEY.to_string());
+    crate::hotkey::configure(&app, &hotkey).await
 }
 
 #[cfg(test)]

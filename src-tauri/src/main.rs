@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod hotkey;
 mod crash;
 mod network;
 mod trust;
@@ -108,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .ok()
         .flatten()
-        .unwrap_or_else(|| "ctrl+space".to_string());
+        .unwrap_or_else(|| hotkey::DEFAULT_HOTKEY.to_string());
 
     // The background network servers hold an immutable Arc<LocalIdentity>; the
     // commands layer holds a separate lockable copy whose device name can change.
@@ -133,8 +134,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         transfer_queue: Arc::clone(&transfer_queue),
     };
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+    let builder = tauri::Builder::default();
+    let builder = if hotkey::uses_portal() {
+        builder
+    } else {
+        builder.plugin(tauri_plugin_global_shortcut::Builder::new().build())
+    };
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -176,32 +182,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 });
             }
 
-            // Global hotkey to toggle the overlay.
-            // Linux X11 uses XGrabKey; Wayland uses the inhibitor protocol and may
-            // require the user to grant permission. macOS uses Carbon RegisterEventHotKey,
-            // which needs no Accessibility permission but refuses combinations the system
-            // or another application already owns. Windows uses RegisterHotKey with no
-            // extra setup.
-            {
-                use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-                if let Err(e) = app.global_shortcut().on_shortcut(
-                    hotkey.as_str(),
-                    |app, _shortcut, event| {
-                        if event.state == ShortcutState::Pressed {
-                            if let Some(window) = app.get_webview_window("main") {
-                                if window.is_visible().unwrap_or(false) {
-                                    let _ = window.hide();
-                                } else {
-                                    let _ = window.show();
-                                    let _ = window.set_focus();
-                                }
-                            }
-                        }
-                    },
-                ) {
-                    tracing::error!("failed to register global shortcut '{}': {}", hotkey, e);
+            // Portal consent must not block the UI event loop at startup.
+            let hotkey_app = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = hotkey::register_hotkey(&hotkey_app, &hotkey).await {
+                    tracing::warn!("hotkey: registration failed: {error}");
                 }
-            }
+            });
 
             // Pairing responder server.
             let handle = app.handle().clone();
@@ -395,6 +382,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::get_autostart,
             commands::get_ipc_status,
             commands::set_hotkey,
+            commands::get_hotkey_info,
+            commands::configure_hotkey,
             commands::request_file_cmd,
             commands::request_files_cmd,
             commands::send_files_cmd,
