@@ -989,6 +989,32 @@ pub fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+// Keep startup results available when Settings opens after the event was emitted.
+static CORE_UPDATE_STATUS: std::sync::Mutex<Option<synapt_core::updates::CoreUpdateStatus>> =
+    std::sync::Mutex::new(None);
+
+/// Return bundled core compatibility and the last remote check, if any.
+#[tauri::command]
+pub fn get_core_update_status() -> synapt_core::updates::CoreUpdateStatus {
+    CORE_UPDATE_STATUS.lock().ok().and_then(|status| status.clone()).unwrap_or_else(|| {
+        synapt_core::updates::bundled_status(
+            env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"), env!("SYNAPT_CORE_REQUIREMENT"),
+        )
+    })
+}
+
+/// Check core releases separately from app updates, preserving app-update availability on failure.
+#[tauri::command]
+pub async fn check_core_update() -> synapt_core::updates::CoreUpdateStatus {
+    let status = synapt_core::updates::check_for_update(
+        env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"), env!("SYNAPT_CORE_REQUIREMENT"),
+    ).await;
+    if let Ok(mut cached) = CORE_UPDATE_STATUS.lock() {
+        *cached = Some(status.clone());
+    }
+    status
+}
+
 /// Whether automatic update checks are enabled. Defaults to true when unset.
 pub async fn auto_update_enabled(db: &crate::storage::Db) -> bool {
     db.get_setting("auto_update_check").await.ok().flatten().as_deref() != Some("false")
@@ -1004,7 +1030,14 @@ pub async fn run_auto_update_check(app: &tauri::AppHandle, db: &crate::storage::
         tracing::debug!("automatic update check is disabled");
         return;
     }
-    match check_for_update(app.clone()).await {
+    let (app_update, core_update) = tokio::join!(check_for_update(app.clone()), check_core_update());
+    if let Some(error) = &core_update.check_error {
+        tracing::warn!("core update check failed: {error}");
+    }
+    if let Err(error) = app.emit("core-update-status", &core_update) {
+        tracing::warn!("could not emit core-update-status: {error}");
+    }
+    match app_update {
         Ok(Some(info)) => {
             tracing::info!("update available: v{}", info.version);
             if crate::notify::enabled(db).await {

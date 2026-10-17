@@ -1,3 +1,5 @@
+import { useCoreUpdate } from '../hooks/useCoreUpdate';
+import { CoreUpdateNotice } from '../components/CoreUpdateNotice';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
@@ -230,21 +232,26 @@ export const Settings: React.FC = () => {
   const [manualVerify, setManualVerify] = useState<string | null>(null);
   const [incomingPair, setIncomingPair] = useState<IncomingPair | null>(null);
 
+  const coreUpdate = useCoreUpdate();
+  const checkCoreUpdate = coreUpdate.check;
   const [appVersion, setAppVersion] = useState('');
   const [updateState, setUpdateState] = useState<UpdateState>({ kind: 'idle' });
   const [autoUpdate, setAutoUpdate] = useState(true);
 
   const checkForUpdate = useCallback(async () => {
     setUpdateState({ kind: 'checking' });
+    const coreCheck = checkCoreUpdate();
     try {
       const info = await invoke<UpdateInfo | null>('check_for_update');
       setUpdateState(info ? { kind: 'available', info } : { kind: 'none' });
     } catch (e) {
       setUpdateState({ kind: 'error', message: String(e) });
+    } finally {
+      await coreCheck;
     }
-  }, []);
+  }, [checkCoreUpdate]);
 
-  const busy = updateState.kind === 'checking' || updateState.kind === 'installing';
+  const busy = coreUpdate.checking || updateState.kind === 'checking' || updateState.kind === 'installing';
   const statusTone =
     updateState.kind === 'available'
       ? 'var(--text)'
@@ -1009,6 +1016,8 @@ export const Settings: React.FC = () => {
                     {updateState.info.notes}
                   </p>
                 )}
+
+                <CoreUpdateNotice status={coreUpdate.status} checking={coreUpdate.checking} error={coreUpdate.error} />
 
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
