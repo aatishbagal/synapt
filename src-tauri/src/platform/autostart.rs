@@ -1,7 +1,7 @@
 //! Cross-platform auto-start on login, without requiring elevated permissions.
 //!
 //! Linux uses a systemd user service, Windows a per-user `Run` registry value,
-//! and macOS a LaunchAgent plist — all scoped to the current user.
+//! and macOS a LaunchAgent plist - all scoped to the current user.
 
 use thiserror::Error;
 

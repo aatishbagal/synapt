@@ -9,11 +9,11 @@ function phaseLabel(phase: IndexPhase, filesScanned: number): string {
     case 'Starting':
       return 'Preparing index...';
     case 'Scanning':
-      return `Scanning — ${filesScanned.toLocaleString()} files`;
+      return `Scanning - ${filesScanned.toLocaleString()} files`;
     case 'BuildingIndex':
       return 'Building search index...';
     case 'Complete':
-      return `Index complete — ${phase.total_files.toLocaleString()} files`;
+      return `Index complete - ${phase.total_files.toLocaleString()} files`;
     case 'Failed':
       return `Index failed: ${phase.reason}`;
   }

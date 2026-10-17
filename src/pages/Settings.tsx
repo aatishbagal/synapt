@@ -637,7 +637,7 @@ export const Settings: React.FC = () => {
                     <p className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{p.device_name}</p>
                     <p className="text-xs" style={{ color: 'var(--muted)', fontFamily: 'monospace' }}>{p.fingerprint.slice(0, 16)}</p>
                     <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                      paired {relativeDate(p.paired_at)} · last seen {relativeDate(p.last_seen)}
+                      paired {relativeDate(p.paired_at)} | last seen {relativeDate(p.last_seen)}
                     </p>
                   </div>
                   <button onClick={() => removePeer(p.device_id)} className="rounded px-2 py-1 text-xs shrink-0 ml-2 transition-colors" style={dangerButton}>Remove</button>
@@ -792,7 +792,7 @@ export const Settings: React.FC = () => {
                   <div className="min-w-0">
                     <p className="text-xs break-all" style={{ color: 'var(--text)', fontFamily: 'monospace' }}>{d.path}</p>
                     <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                      {d.file_count.toLocaleString()} files · scanned {relativeDate(d.last_indexed)}
+                      {d.file_count.toLocaleString()} files | scanned {relativeDate(d.last_indexed)}
                     </p>
                   </div>
                   <button onClick={() => removeIndexedDir(d.path)} className="rounded px-2 py-1 text-xs shrink-0 ml-2 transition-colors" style={dangerButton}>Remove</button>

@@ -15,7 +15,7 @@ pub async fn enabled(db: &Db) -> bool {
         != Some("false")
 }
 
-/// Send a system notification. Silently ignores errors — notifications are best-effort.
+/// Send a system notification. Silently ignores errors - notifications are best-effort.
 pub fn send(app: &AppHandle, title: &str, body: &str) {
     let _ = app.notification().builder().title(title).body(body).show();
 }

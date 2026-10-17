@@ -142,7 +142,7 @@ export const TransferHistory: React.FC = () => {
                         {t.status}
                       </span>
                       <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                        {formatBytes(t.size)} · {relativeDate(t.started_at)}
+                        {formatBytes(t.size)} | {relativeDate(t.started_at)}
                       </p>
                     </div>
                   </button>

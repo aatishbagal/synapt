@@ -55,7 +55,7 @@ pub async fn start(state: IpcState) {
         Ok(l) => l,
         Err(e) => {
             tracing::error!(
-                "IPC server failed to bind on port {}: {} — SynaptClip integration disabled",
+                "IPC server failed to bind on port {}: {} - SynaptClip integration disabled",
                 IPC_PORT,
                 e
             );
@@ -275,7 +275,7 @@ async fn send_temp_clip(
     result
 }
 
-/// POST /v1/clips/send — accept text from the local SynaptClip and deliver it to a
+/// POST /v1/clips/send - accept text from the local SynaptClip and deliver it to a
 /// trusted peer over the existing encrypted transfer layer. Returns 202 immediately;
 /// the transfer runs asynchronously.
 async fn clips_send_handler(
