@@ -766,7 +766,8 @@ pub async fn push_files(
 
     for local_path in local_paths {
         if let Err(e) = push_one_file(
-            &local_path, peer_ip, &local_id, identity, &peer_pubkey, peer_name, app, queue,
+            &Uuid::new_v4().to_string(), &local_path, peer_ip, &local_id, identity,
+            &peer_pubkey, peer_name, app, queue,
         )
         .await
         {
@@ -778,6 +779,7 @@ pub async fn push_files(
 
 #[allow(clippy::too_many_arguments)]
 async fn push_one_file(
+    transfer_id: &str,
     local_path: &str,
     peer_ip: IpAddr,
     local_id: &str,
@@ -799,10 +801,9 @@ async fn push_one_file(
         .unwrap_or_else(|| "file".into());
     let checksum = sha256_of_file(p).await?;
 
-    let transfer_id = Uuid::new_v4().to_string();
     let started_at = chrono::Utc::now().timestamp();
     queue.push(QueueEntry {
-        transfer_id: transfer_id.clone(),
+        transfer_id: transfer_id.to_string(),
         filename: filename.clone(),
         remote_path: local_path.to_string(),
         peer_name: peer_name.to_string(),
@@ -815,34 +816,8 @@ async fn push_one_file(
     let mut stream = TcpStream::connect((peer_ip, TRANSFER_PORT)).await?;
     let key = session_handshake_client(&mut stream, local_id, identity, peer_pubkey).await?;
 
-    write_enc(
-        &mut stream,
-        &key,
-        &serde_json::to_vec(&TransferMsg::PushStart {
-            filename: filename.clone(),
-            size,
-            checksum,
-        })?,
-    )
-    .await?;
-
-    match serde_json::from_slice::<TransferMsg>(&read_enc(&mut stream, &key).await?)? {
-        TransferMsg::PushAccept => {}
-        TransferMsg::Error { code } => return Err(TransferError::Protocol(code)),
-        other => return Err(TransferError::Protocol(format!("unexpected {other:?}"))),
-    }
-
-    let mut file = tokio::fs::File::open(p).await?;
-    let mut buf = vec![0u8; CHUNK_SIZE];
-    let mut sent = 0u64;
-    loop {
-        let n = file.read(&mut buf).await?;
-        if n == 0 {
-            break;
-        }
-        write_enc(&mut stream, &key, &buf[..n]).await?;
-        sent += n as u64;
-        queue.update(&transfer_id, QueueStatus::InProgress, sent);
+    let sent = send_push_payload(&mut stream, &key, p, &filename, size, checksum, |sent| {
+        queue.update(transfer_id, QueueStatus::InProgress, sent);
         let _ = app.emit(
             "transfer-progress",
             serde_json::json!({
@@ -853,9 +828,10 @@ async fn push_one_file(
                 "peer_name": peer_name,
             }),
         );
-    }
+    })
+    .await?;
 
-    queue.update(&transfer_id, QueueStatus::Complete, sent);
+    queue.update(transfer_id, QueueStatus::Complete, sent);
     let _ = app.emit(
         "transfer-complete",
         serde_json::json!({
@@ -868,6 +844,114 @@ async fn push_one_file(
     Ok(())
 }
 
+/// Push an internally created clip to its trusted destination with a bounded lifetime.
+#[allow(clippy::too_many_arguments)]
+pub async fn push_clip_file(
+    transfer_id: &str,
+    peer_device_id: &str,
+    peer_ip: IpAddr,
+    local_path: &Path,
+    identity: &LocalIdentity,
+    db: &Db,
+    peer_name: &str,
+    app: &AppHandle,
+    queue: &TransferQueue,
+) -> Result<(), TransferError> {
+    // This is an outgoing push of an app-created file, not a request to read a
+    // path on the peer. Remote pull requests still go through is_path_allowed.
+    let transfer = async {
+        let peers = db.get_trusted_peers().await?;
+        let peer = peers
+            .iter()
+            .find(|peer| peer.device_id == peer_device_id)
+            .ok_or(TransferError::NotTrusted)?;
+        push_one_file(
+            transfer_id,
+            &local_path.to_string_lossy(),
+            peer_ip,
+            &identity.device_id.to_string(),
+            identity,
+            &peer.pubkey_b64,
+            peer_name,
+            app,
+            queue,
+        )
+        .await
+    };
+    let result = match tokio::time::timeout(Duration::from_secs(60), transfer).await {
+        Ok(result) => result,
+        Err(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "clipboard transfer timed out",
+        )
+        .into()),
+    };
+    if let Err(error) = &result {
+        let sent = queue
+            .list()
+            .iter()
+            .find(|entry| entry.transfer_id == transfer_id)
+            .map(|entry| entry.bytes_received)
+            .unwrap_or(0);
+        queue.update(
+            transfer_id,
+            QueueStatus::Failed {
+                reason: error.to_string(),
+            },
+            sent,
+        );
+        let _ = app.emit(
+            "transfer-failed",
+            serde_json::json!({
+                "transfer_id": transfer_id,
+                "reason": error.to_string(),
+            }),
+        );
+    }
+    result
+}
+
+// Send the existing push protocol on an authenticated connection. Keeping the
+// wire exchange separate from UI events lets tests exercise the real frames.
+async fn send_push_payload(
+    stream: &mut TcpStream,
+    key: &[u8; 32],
+    path: &Path,
+    filename: &str,
+    size: u64,
+    checksum: String,
+    mut progress: impl FnMut(u64),
+) -> Result<u64, TransferError> {
+    let mut file = tokio::fs::File::open(path).await?;
+    write_enc(
+        stream,
+        key,
+        &serde_json::to_vec(&TransferMsg::PushStart {
+            filename: filename.to_string(),
+            size,
+            checksum,
+        })?,
+    )
+    .await?;
+    match serde_json::from_slice::<TransferMsg>(&read_enc(stream, key).await?)? {
+        TransferMsg::PushAccept => {}
+        TransferMsg::Error { code } => return Err(TransferError::Protocol(code)),
+        other => return Err(TransferError::Protocol(format!("unexpected {other:?}"))),
+    }
+    let mut buf = vec![0u8; CHUNK_SIZE];
+    let mut sent = 0u64;
+    loop {
+        let count = file.read(&mut buf).await?;
+        if count == 0 {
+            break;
+        }
+        write_enc(stream, key, &buf[..count]).await?;
+        sent += count as u64;
+        progress(sent);
+    }
+    Ok(sent)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -875,6 +959,136 @@ mod tests {
 
     fn unique_base() -> PathBuf {
         std::env::temp_dir().join(format!("synapt-test-{}", uuid::Uuid::new_v4()))
+    }
+
+    #[test]
+    fn is_path_allowed_rejects_internal_clip_paths_for_remote_pulls() {
+        let base = unique_base();
+        let shared = base.join("shared");
+        let internal = base.join("synapt-clips");
+        fs::create_dir_all(&shared).unwrap();
+        fs::create_dir_all(&internal).unwrap();
+        let clip = internal.join(format!("{}.txt", Uuid::new_v4()));
+        fs::write(&clip, "private clipboard").unwrap();
+        assert!(!is_path_allowed(
+            &clip,
+            &[shared.to_string_lossy().to_string()]
+        ));
+        assert!(!is_path_allowed(&clip, &[]));
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[tokio::test]
+    async fn clip_push_sends_local_bytes_without_requesting_a_remote_path() {
+        let base = unique_base();
+        fs::create_dir_all(&base).unwrap();
+        let filename = format!("{}.txt", Uuid::new_v4());
+        let path = base.join(&filename);
+        let content = "clipboard text ".repeat(CHUNK_SIZE / 7);
+        fs::write(&path, content.as_bytes()).unwrap();
+        assert!(!is_path_allowed(&path, &[]));
+        let checksum = sha256_of_file(&path).await.unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let key = [7u8; 32];
+        let sender = async {
+            let mut stream = TcpStream::connect(address).await.unwrap();
+            let mut progress = 0;
+            let sent = send_push_payload(
+                &mut stream,
+                &key,
+                &path,
+                &filename,
+                content.len() as u64,
+                checksum.clone(),
+                |bytes| progress = bytes,
+            )
+            .await
+            .unwrap();
+            assert_eq!(sent, content.len() as u64);
+            assert_eq!(progress, sent);
+        };
+        let receiver = async {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let first: TransferMsg =
+                serde_json::from_slice(&read_enc(&mut stream, &key).await.unwrap()).unwrap();
+            let size = match first {
+                TransferMsg::PushStart {
+                    filename: name,
+                    size,
+                    checksum: digest,
+                } => {
+                    assert_eq!(name, filename);
+                    assert_eq!(digest, checksum);
+                    assert!(crate::ipc::webhook::is_synaptclip_clip(Path::new(&name)));
+                    size
+                }
+                other => panic!("expected outgoing push, got {other:?}"),
+            };
+            write_enc(
+                &mut stream,
+                &key,
+                &serde_json::to_vec(&TransferMsg::PushAccept).unwrap(),
+            )
+            .await
+            .unwrap();
+            let mut received = Vec::new();
+            while (received.len() as u64) < size {
+                received.extend(read_enc(&mut stream, &key).await.unwrap());
+            }
+            assert_eq!(received, content.as_bytes());
+            assert_eq!(to_hex(&Sha256::digest(&received)), checksum);
+        };
+        tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::join!(sender, receiver);
+        })
+        .await
+        .unwrap();
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[tokio::test]
+    async fn push_rejection_is_returned_without_sending_clip_content() {
+        let base = unique_base();
+        fs::create_dir_all(&base).unwrap();
+        let path = base.join("clip.txt");
+        fs::write(&path, "private").unwrap();
+        let checksum = sha256_of_file(&path).await.unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let key = [9u8; 32];
+        let sender = async {
+            let mut stream = TcpStream::connect(address).await.unwrap();
+            let result =
+                send_push_payload(&mut stream, &key, &path, "clip.txt", 7, checksum, |_| {
+                    panic!("must not send rejected content")
+                })
+                .await;
+            assert!(matches!(result, Err(TransferError::Protocol(code)) if code == "rejected"));
+        };
+        let receiver = async {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let first: TransferMsg =
+                serde_json::from_slice(&read_enc(&mut stream, &key).await.unwrap()).unwrap();
+            assert!(matches!(first, TransferMsg::PushStart { .. }));
+            write_enc(
+                &mut stream,
+                &key,
+                &serde_json::to_vec(&TransferMsg::Error {
+                    code: "rejected".into(),
+                })
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+            assert!(read_enc(&mut stream, &key).await.is_err());
+        };
+        tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::join!(sender, receiver);
+        })
+        .await
+        .unwrap();
+        fs::remove_dir_all(base).unwrap();
     }
 
     #[test]

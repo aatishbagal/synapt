@@ -17,6 +17,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       exists: ${{ steps.tag.outputs.exists }}
+      core_ref: ${{ steps.core.outputs.ref }}
     steps:
       - uses: actions/checkout@v4
 
@@ -36,6 +37,18 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "v${{ steps.version.outputs.version }} is new - will build a release."
           fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Wait for the matching core release
+        if: steps.tag.outputs.exists == 'false'
+        id: core
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/wait_for_core.py src-tauri/Cargo.toml
 
   release:
     needs: check
@@ -63,6 +76,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: aatishbagal/synapt-core
+          ref: ${{ needs.check.outputs.core_ref }}
           path: synapt-core
           # If synapt-core is PRIVATE, the default GITHUB_TOKEN cannot read it.
           # Create a fine-grained PAT with read access to synapt-core, store it

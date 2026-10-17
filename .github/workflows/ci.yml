@@ -31,11 +31,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: aatishbagal/synapt-core
+          ref: dev
           path: synapt-core
           # If synapt-core is PRIVATE, the default GITHUB_TOKEN cannot read it.
           # Create a fine-grained PAT with read access to synapt-core, store it
           # as a repo secret named SYNAPT_CORE_TOKEN, and uncomment the next line.
           # token: ${{ secrets.SYNAPT_CORE_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Test core release coordination
+        working-directory: synapt
+        run: python3 -B -m unittest discover -s scripts -p 'test_*.py'
 
       - name: Install Linux build dependencies
         run: |
@@ -77,11 +87,11 @@ jobs:
 
       - name: Clippy
         working-directory: synapt/src-tauri
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --locked -- -D warnings
 
       - name: Test
         working-directory: synapt/src-tauri
-        run: cargo test
+        run: cargo test --locked
 
       - name: Frontend build
         working-directory: synapt
@@ -89,4 +99,4 @@ jobs:
 
       - name: Debug build
         working-directory: synapt/src-tauri
-        run: cargo build
+        run: cargo build --locked

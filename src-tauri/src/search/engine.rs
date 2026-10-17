@@ -208,7 +208,7 @@ impl SearchEngine {
             }
         }
 
-        // 3. tantivy wildcard substring stage — catches matches in the middle of a
+        // 3. tantivy wildcard substring stage - catches matches in the middle of a
         // single token, e.g. 'test' in 'somethingtestfile.json'. Only run when the
         // cheaper stages came up short, since the regex automaton is more expensive.
         if results.len() < MIN_RESULTS_BEFORE_FUZZY {
@@ -219,7 +219,7 @@ impl SearchEngine {
             }
         }
 
-        // 4. Application search — apps are surfaced above files. Always run so a
+        // 4. Application search - apps are surfaced above files. Always run so a
         // matching app appears regardless of how many files matched.
         let app_results = self.db.search_apps_by_name(&q).await.unwrap_or_default();
         for app in app_results {

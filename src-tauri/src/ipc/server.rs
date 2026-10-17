@@ -55,7 +55,7 @@ pub async fn start(state: IpcState) {
         Ok(l) => l,
         Err(e) => {
             tracing::error!(
-                "IPC server failed to bind on port {}: {} — SynaptClip integration disabled",
+                "IPC server failed to bind on port {}: {} - SynaptClip integration disabled",
                 IPC_PORT,
                 e
             );
@@ -230,17 +230,52 @@ fn validate_and_resolve(
     Ok(peer)
 }
 
-/// Resolve the configured download directory, mirroring the command layer.
-fn download_dir_from(setting: Option<String>) -> std::path::PathBuf {
-    match setting {
-        Some(d) if !d.is_empty() => std::path::PathBuf::from(d),
-        _ => dirs::download_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("Synapt"),
+// Own the temporary file so completion, errors, timeout and task cancellation
+// all remove it. The OS may still leave it behind after a process crash.
+struct ClipTempFile(std::path::PathBuf);
+
+impl ClipTempFile {
+    fn create(transfer_id: uuid::Uuid, content: &str) -> std::io::Result<Self> {
+        use std::io::Write;
+        let directory = std::env::temp_dir().join("synapt-clips");
+        std::fs::create_dir_all(&directory)?;
+        let path = directory.join(format!("{transfer_id}.txt"));
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&path)?;
+        let temporary = Self(path);
+        let result = file.write_all(content.as_bytes());
+        drop(file);
+        result?;
+        Ok(temporary)
     }
 }
 
-/// POST /v1/clips/send — accept text from the local SynaptClip and deliver it to a
+impl Drop for ClipTempFile {
+    fn drop(&mut self) {
+        if let Err(error) = std::fs::remove_file(&self.0) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!("ipc: could not remove clip temp file: {error}");
+            }
+        }
+    }
+}
+
+async fn send_temp_clip(
+    temporary: ClipTempFile,
+    transfer: impl std::future::Future<Output = Result<(), crate::network::transfer::TransferError>>,
+) -> Result<(), crate::network::transfer::TransferError> {
+    let result = transfer.await;
+    drop(temporary);
+    result
+}
+
+/// POST /v1/clips/send - accept text from the local SynaptClip and deliver it to a
 /// trusted peer over the existing encrypted transfer layer. Returns 202 immediately;
 /// the transfer runs asynchronously.
 async fn clips_send_handler(
@@ -252,50 +287,46 @@ async fn clips_send_handler(
         Err((status, error, message)) => return api_error(status, error, message),
     };
 
-    // Wrap the clip text as a temp file the transfer layer can send. The
-    // <uuid>.txt naming under synapt-clips is what the receive-side webhook detects.
+    // Preserve the <uuid>.txt name recognized by the receiver's clip webhook.
     let transfer_id = uuid::Uuid::new_v4();
-    let tmp_dir = std::env::temp_dir().join("synapt-clips");
-    let _ = std::fs::create_dir_all(&tmp_dir);
-    let tmp_path = tmp_dir.join(format!("{}.txt", transfer_id));
-    if let Err(e) = std::fs::write(&tmp_path, body.content.as_bytes()) {
-        tracing::error!("ipc: failed to write clip temp file: {}", e);
-        return api_error(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "transfer_unavailable",
-            "Could not prepare clip for transfer",
-        );
-    }
+    let temporary = match ClipTempFile::create(transfer_id, &body.content) {
+        Ok(file) => file,
+        Err(error) => {
+            tracing::error!("ipc: failed to write clip temp file: {error}");
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "transfer_unavailable",
+                "Could not prepare clip for transfer",
+            );
+        }
+    };
 
     let identity = Arc::clone(&state.identity);
     let db = Arc::clone(&state.db);
     let queue = Arc::clone(&state.transfer_queue);
     let app = state.app.clone();
-    let path_str = tmp_path.to_string_lossy().to_string();
+    let path = temporary.0.clone();
     let peer_name = peer.device_name.clone();
     let peer_ip = peer.ip;
     let peer_id = peer.device_id.to_string();
 
     tokio::spawn(async move {
-        let download_dir = download_dir_from(
-            db.get_setting("download_dir").await.ok().flatten(),
-        );
-
-        let result = crate::network::transfer::request_transfer_with_retry(
-            &peer_id,
-            peer_ip,
-            path_str.clone(),
-            &identity,
-            &db,
-            &download_dir,
-            &peer_name,
-            &app,
-            &queue,
+        let transfer_id = transfer_id.to_string();
+        let result = send_temp_clip(
+            temporary,
+            crate::network::transfer::push_clip_file(
+                &transfer_id,
+                &peer_id,
+                peer_ip,
+                &path,
+                &identity,
+                &db,
+                &peer_name,
+                &app,
+                &queue,
+            ),
         )
         .await;
-
-        // Remove the temp file whether the transfer succeeded or failed.
-        let _ = std::fs::remove_file(&path_str);
 
         if let Err(e) = result {
             tracing::error!("ipc: clip transfer failed: {}", e);
@@ -315,6 +346,82 @@ async fn clips_send_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn clip_temp_file_is_removed_after_success_and_failure() {
+        for fail in [false, true] {
+            let temporary = ClipTempFile::create(uuid::Uuid::new_v4(), "clipboard text").unwrap();
+            let path = temporary.0.clone();
+            assert!(crate::ipc::webhook::is_synaptclip_clip(&path));
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), "clipboard text");
+            let result = send_temp_clip(temporary, async {
+                if fail {
+                    Err(crate::network::transfer::TransferError::NotTrusted)
+                } else {
+                    Ok(())
+                }
+            })
+            .await;
+            assert_eq!(result.is_err(), fail);
+            assert!(!path.exists());
+        }
+    }
+
+    #[tokio::test]
+    async fn clip_temp_file_is_removed_when_transfer_times_out() {
+        let temporary = ClipTempFile::create(uuid::Uuid::new_v4(), "clipboard text").unwrap();
+        let path = temporary.0.clone();
+        let result = send_temp_clip(temporary, async {
+            tokio::time::timeout(
+                std::time::Duration::from_millis(1),
+                std::future::pending::<()>(),
+            )
+            .await
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "test timeout"))?;
+            Ok(())
+        })
+        .await;
+        assert!(result.is_err());
+        assert!(!path.exists());
+    }
+
+    #[tokio::test]
+    async fn clip_temp_file_is_removed_when_task_is_cancelled() {
+        let temporary = ClipTempFile::create(uuid::Uuid::new_v4(), "clipboard text").unwrap();
+        let path = temporary.0.clone();
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let task = tokio::spawn(send_temp_clip(temporary, async move {
+            let _ = started.send(());
+            std::future::pending().await
+        }));
+        ready.await.unwrap();
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn clip_temp_file_does_not_overwrite_or_remove_an_existing_file() {
+        let id = uuid::Uuid::new_v4();
+        let first = ClipTempFile::create(id, "original").unwrap();
+        assert!(ClipTempFile::create(id, "replacement").is_err());
+        assert_eq!(std::fs::read_to_string(&first.0).unwrap(), "original");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn clip_temp_file_is_private_to_its_owner() {
+        use std::os::unix::fs::PermissionsExt;
+        let temporary = ClipTempFile::create(uuid::Uuid::new_v4(), "private").unwrap();
+        assert_eq!(
+            std::fs::metadata(&temporary.0)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o077,
+            0
+        );
+    }
 
     #[tokio::test]
     async fn health_handler_returns_version_one_and_ok() {

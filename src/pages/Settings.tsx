@@ -1,3 +1,5 @@
+import { useCoreUpdate } from '../hooks/useCoreUpdate';
+import { CoreUpdateNotice } from '../components/CoreUpdateNotice';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
@@ -6,6 +8,7 @@ import { ArrowLeft } from 'lucide-react';
 import { IndexProgress, InviteCodeInfo, IpcStatus, TrustedPeer } from '../types';
 import { PairingDialog } from '../components/PairingDialog';
 import { useTheme } from '../hooks/useTheme';
+import { useHotkeyInfo } from '../hooks/useHotkeyInfo';
 import { Select } from '../components/Select';
 import { UnderlineLoader } from '../components/UnderlineLoader';
 
@@ -197,6 +200,8 @@ export const Settings: React.FC = () => {
   const [indexActive, setIndexActive] = useState(false);
 
   const [hotkey, setHotkey] = useState('ctrl+space');
+  const shortcut = useHotkeyInfo();
+  const [hotkeyError, setHotkeyError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
 
   const [downloadDir, setDownloadDir] = useState('');
@@ -227,21 +232,26 @@ export const Settings: React.FC = () => {
   const [manualVerify, setManualVerify] = useState<string | null>(null);
   const [incomingPair, setIncomingPair] = useState<IncomingPair | null>(null);
 
+  const coreUpdate = useCoreUpdate();
+  const checkCoreUpdate = coreUpdate.check;
   const [appVersion, setAppVersion] = useState('');
   const [updateState, setUpdateState] = useState<UpdateState>({ kind: 'idle' });
   const [autoUpdate, setAutoUpdate] = useState(true);
 
   const checkForUpdate = useCallback(async () => {
     setUpdateState({ kind: 'checking' });
+    const coreCheck = checkCoreUpdate();
     try {
       const info = await invoke<UpdateInfo | null>('check_for_update');
       setUpdateState(info ? { kind: 'available', info } : { kind: 'none' });
     } catch (e) {
       setUpdateState({ kind: 'error', message: String(e) });
+    } finally {
+      await coreCheck;
     }
-  }, []);
+  }, [checkCoreUpdate]);
 
-  const busy = updateState.kind === 'checking' || updateState.kind === 'installing';
+  const busy = coreUpdate.checking || updateState.kind === 'checking' || updateState.kind === 'installing';
   const statusTone =
     updateState.kind === 'available'
       ? 'var(--text)'
@@ -519,11 +529,12 @@ export const Settings: React.FC = () => {
       const combo = pendingHotkey.current;
       if (!combo) return;
       pendingHotkey.current = null;
+      setHotkeyError(null);
       try {
         await invoke('set_hotkey', { hotkey: combo });
         setHotkey(combo);
-      } catch {
-        /* keep the previous hotkey if the new one fails to register */
+      } catch (error) {
+        setHotkeyError(String(error));
       }
       setRecording(false);
     };
@@ -633,7 +644,7 @@ export const Settings: React.FC = () => {
                     <p className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{p.device_name}</p>
                     <p className="text-xs" style={{ color: 'var(--muted)', fontFamily: 'monospace' }}>{p.fingerprint.slice(0, 16)}</p>
                     <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                      paired {relativeDate(p.paired_at)} · last seen {relativeDate(p.last_seen)}
+                      paired {relativeDate(p.paired_at)} | last seen {relativeDate(p.last_seen)}
                     </p>
                   </div>
                   <button onClick={() => removePeer(p.device_id)} className="rounded px-2 py-1 text-xs shrink-0 ml-2 transition-colors" style={dangerButton}>Remove</button>
@@ -788,7 +799,7 @@ export const Settings: React.FC = () => {
                   <div className="min-w-0">
                     <p className="text-xs break-all" style={{ color: 'var(--text)', fontFamily: 'monospace' }}>{d.path}</p>
                     <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                      {d.file_count.toLocaleString()} files · scanned {relativeDate(d.last_indexed)}
+                      {d.file_count.toLocaleString()} files | scanned {relativeDate(d.last_indexed)}
                     </p>
                   </div>
                   <button onClick={() => removeIndexedDir(d.path)} className="rounded px-2 py-1 text-xs shrink-0 ml-2 transition-colors" style={dangerButton}>Remove</button>
@@ -809,16 +820,32 @@ export const Settings: React.FC = () => {
         <Section title="Hotkey">
           <div className="flex items-center justify-between px-3 py-2" style={itemCard}>
             <p className="text-xs" style={{ color: 'var(--text)', fontFamily: 'monospace' }}>
-              {recording ? 'Press any key...' : prettyHotkey(hotkey)}
+              {shortcut.info?.wayland
+                ? shortcut.info.trigger ?? 'Shortcut not active'
+                : recording ? 'Press any key...' : prettyHotkey(hotkey)}
             </p>
             <button
-              onClick={() => setRecording(r => !r)}
+              disabled={shortcut.busy || shortcut.info === null}
+              onClick={() => {
+                if (shortcut.info?.wayland) void shortcut.configure();
+                else setRecording(r => !r);
+              }}
               className="rounded px-2 py-1 text-xs shrink-0 ml-2 transition-colors"
               style={recording ? accentButton : subtleButton}
             >
-              {recording ? 'Press any key...' : 'Change'}
+              {shortcut.busy ? 'Waiting for desktop...' : shortcut.info?.wayland ? 'Configure shortcut' : recording ? 'Press any key...' : 'Change'}
             </button>
           </div>
+          {shortcut.info?.wayland && (
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>
+              Your desktop manages this shortcut and may ask for permission.
+            </p>
+          )}
+          {(shortcut.error || shortcut.info?.error || hotkeyError) && (
+            <p className="text-xs" style={{ color: 'var(--danger)' }}>
+              {shortcut.error || shortcut.info?.error || hotkeyError}
+            </p>
+          )}
         </Section>
 
         {/* 7. Preferences */}
@@ -989,6 +1016,8 @@ export const Settings: React.FC = () => {
                     {updateState.info.notes}
                   </p>
                 )}
+
+                <CoreUpdateNotice status={coreUpdate.status} checking={coreUpdate.checking} error={coreUpdate.error} />
 
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
