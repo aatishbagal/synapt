@@ -142,7 +142,7 @@ export const PairingDialog: React.FC<Props> = ({
   return (
     <div
       className="fixed inset-0 flex items-center justify-center z-50"
-      style={{ backgroundColor: 'rgba(0, 0, 0, 0.6)' }}
+      style={{ backgroundColor: 'var(--backdrop)' }}
     >
       <div
         className="p-6 w-80"

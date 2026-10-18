@@ -160,7 +160,7 @@ export const DeviceMultiSelect: React.FC<Props> = ({ devices, filePath, onClose 
               selected.size === 0
                 ? 'color-mix(in srgb, var(--accent) 30%, transparent)'
                 : 'var(--accent)',
-            color: selected.size === 0 ? 'var(--muted)' : '#fff',
+            color: selected.size === 0 ? 'var(--muted)' : 'var(--on-accent)',
           }}
         >
           Send

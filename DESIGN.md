@@ -21,8 +21,9 @@ Defined in `src/index.css`. The theme is chosen by `data-theme` on `<html>`
 (`dark`, `light`, or `system`). `system` follows `prefers-color-scheme` through two
 media-query blocks. The bare `:root` block repeats the dark values as the default.
 
-Tailwind is not extended (`theme.extend` is empty), so tokens are applied through
-inline `style` props as `var(--token)` rather than Tailwind colour classes.
+Tailwind extends only transition timing and duration (see Animation System). Colours
+are not in the Tailwind theme, so tokens are applied through inline `style` props as
+`var(--token)` rather than Tailwind colour classes.
 
 ### Background
 
@@ -73,15 +74,22 @@ Values in use: 15% (fill), 30% (border), 40% (border), 60% (icon).
 | `--highlight-bg` | `#854d0e` | `#fde68a` | Search match highlight fill |
 | `--highlight-text` | `#fef08a` | `#78350f` | Search match highlight text |
 
-No token has the same value in dark and light.
+### Theme-independent
+
+Declared once in a separate `:root` block because the value is the same in both themes.
+
+| Token | Value | Use |
+|---|---|---|
+| `--on-accent` | `#ffffff` | Text on accent- or danger-filled buttons |
+| `--backdrop` | `rgba(0, 0, 0, 0.6)` | Pairing dialog backdrop |
+| `--shadow-popup` | `0 4px 12px rgba(0, 0, 0, 0.3)` | `Select` popup shadow |
+
+All other tokens differ between dark and light.
 
 ### Hardcoded colours outside tokens
 
-- `#fff` - text on accent-filled buttons (`InlineConfirm`, `DeviceMultiSelect`, `Overlay`, `Select`)
-- `#f87171` - error text in `TransferCard`
-- `rgba(0, 0, 0, 0.6)` - pairing dialog backdrop
-- `rgba(0, 0, 0, 0.3)` - `Select` popup shadow
-- `src/App.css` holds the unused Vite starter palette (`#0f0f0f`, `#f6f6f6`, `#646cff` and others). `App.tsx` and `App.css` are not imported anywhere.
+None in components. `src/App.css` holds the unused Vite starter palette (`#0f0f0f`,
+`#f6f6f6`, `#646cff` and others); `App.tsx` and `App.css` are not imported anywhere.
 
 ## Typography
 
@@ -145,8 +153,8 @@ Surface hierarchy:
 Current code differs:
 
 - Layers are also separated by 1px `--border` lines: header bottom, search bar bottom, and between every result row.
-- `Select` popup uses `box-shadow: 0 4px 12px rgba(0,0,0,0.3)`.
-- Pairing dialog uses a `rgba(0,0,0,0.6)` backdrop.
+- `Select` popup uses `box-shadow: var(--shadow-popup)`.
+- Pairing dialog uses a `var(--backdrop)` backdrop.
 
 ## Interactive States
 
@@ -181,6 +189,24 @@ Principles:
 Motion library: Framer Motion (`motion` package) for spring and presence animations.
 CSS cubic-bezier for micro-interactions and hover states.
 
+Tokens (in the stylesheet as custom properties, mirrored as Tailwind
+`ease-*` / `duration-*` utilities):
+
+| Token | Value | Tailwind |
+|---|---|---|
+| `--ease-standard` | `cubic-bezier(0.25, 0.1, 0.25, 1.0)` | `ease-standard` |
+| `--ease-decelerate` | `cubic-bezier(0.0, 0.0, 0.2, 1.0)` | `ease-decelerate` |
+| `--ease-accelerate` | `cubic-bezier(0.4, 0.0, 1.0, 1.0)` | `ease-accelerate` |
+| `--duration-micro` | `100ms` | `duration-micro` |
+| `--duration-short` | `150ms` | `duration-short` |
+| `--duration-medium` | `200ms` | `duration-medium` |
+
+Reduced motion: a global `prefers-reduced-motion: reduce` block collapses every CSS
+animation and transition to one 0.01ms frame. Infinite loaders run once and hold a
+static end frame instead of flickering. Elements marked `data-motion-timer` are exempt
+because their animation is a functional countdown, not decoration.
+Motion (JS) animations must check reduced motion themselves (`useReducedMotion()`).
+
 Currently in use:
 
 - Panel fade-in: `opacity 120ms ease-out` (`.panel-root`)
@@ -192,10 +218,9 @@ Currently in use:
 
 Current code differs:
 
-- `motion` / Framer Motion is not a dependency yet.
+- `motion` is installed but not yet used by any component.
 - No transition uses the specified cubic-bezier; all use `ease-out`, `ease-in-out`, `linear`, or Tailwind's default curve.
-- `prefers-reduced-motion` is not handled anywhere.
-- The two looping loaders run 1.2s. They are indeterminate progress indicators, not transitions, but they still need a reduced-motion fallback.
+- The two looping loaders run 1.2s. They are indeterminate progress indicators, not transitions; under reduced motion they hold a static segment.
 
 ## Z-Index
 
@@ -222,12 +247,11 @@ enabled so the transparent webview corners render correctly.
 - Window is transparent and frameless
 - Tray icon in system tray notification area
 - No window shadow (disabled to avoid rendering artifacts)
-- Scrollbar styling: thin (2px) using CSS scrollbar-width
+- Scrollbar styling: thin (4px vertical, 2px horizontal) via `::-webkit-scrollbar`, with `scrollbar-width: thin` as the fallback; applied globally
 
 Current code differs:
 
 - `shadow` is not set in `tauri.conf.json` and is not disabled at runtime, so the Tauri default (shadow on) applies.
-- Synapt has no custom scrollbar styling; result lists use the WebView default scrollbar.
 
 ### Linux
 

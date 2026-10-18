@@ -127,7 +127,7 @@ export const TransferCard: React.FC = () => {
   const pct = totalBytes > 0 ? Math.min(100, (receivedBytes / totalBytes) * 100) : anyInProgress ? 0 : 100;
 
   const fillColor = anyFailed
-    ? '#f87171'
+    ? 'var(--danger)'
     : !anyInProgress
       ? 'var(--success)'
       : 'var(--accent)';

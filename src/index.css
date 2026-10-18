@@ -102,10 +102,54 @@
   }
 }
 
+/* Theme-independent tokens: identical in dark and light, so they are declared
+   once rather than repeated in every theme block. */
+:root {
+  --on-accent: #ffffff;
+  --backdrop: rgba(0, 0, 0, 0.6);
+  --shadow-popup: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+  --ease-standard: cubic-bezier(0.25, 0.1, 0.25, 1.0);
+  --ease-decelerate: cubic-bezier(0.0, 0.0, 0.2, 1.0);
+  --ease-accelerate: cubic-bezier(0.4, 0.0, 1.0, 1.0);
+  --duration-micro: 100ms;
+  --duration-short: 150ms;
+  --duration-medium: 200ms;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+/* Thin scrollbars everywhere. Firefox-style properties are the fallback; where
+   ::-webkit-scrollbar is supported they are reset so the WebKit rules below
+   control the exact size (setting scrollbar-width disables them in Chromium). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+@supports selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+
+*::-webkit-scrollbar {
+  width: 4px;
+  height: 2px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
 }
 
 /* Synapt's overlay window is transparent, so the body stays transparent and
@@ -155,5 +199,37 @@ body {
   }
   100% {
     transform: translateX(350%);
+  }
+}
+
+/* Reduced motion: collapse every animation and transition to a single instant
+   frame. Infinite loaders would otherwise flicker at 0.01ms per cycle, so they
+   run once and hold a static end frame (redefined below) that still reads as
+   "in progress". Elements marked data-motion-timer are exempt because their
+   animation is a countdown that drives behaviour, not decoration. */
+@media (prefers-reduced-motion: reduce) {
+  *:not([data-motion-timer]),
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-fill-mode: both !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  @keyframes underline-load {
+    from,
+    to {
+      left: 0%;
+      right: 0%;
+    }
+  }
+
+  @keyframes search-loading {
+    from,
+    to {
+      transform: translateX(75%);
+    }
   }
 }

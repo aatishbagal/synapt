@@ -83,7 +83,7 @@ export function Select({ value, options, onChange, disabled }: SelectProps) {
             borderRadius: 6,
             zIndex: 1000,
             overflow: 'hidden',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            boxShadow: 'var(--shadow-popup)',
           }}
         >
           {options.map(opt => (
@@ -98,7 +98,7 @@ export function Select({ value, options, onChange, disabled }: SelectProps) {
                 width: '100%',
                 padding: '8px 12px',
                 background: opt.value === value ? 'var(--accent)' : 'transparent',
-                color: opt.value === value ? '#fff' : 'var(--text)',
+                color: opt.value === value ? 'var(--on-accent)' : 'var(--text)',
                 border: 'none',
                 textAlign: 'left',
                 fontSize: 13,

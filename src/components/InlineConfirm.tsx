@@ -71,7 +71,7 @@ export const InlineConfirm: React.FC<Props> = ({
           style={{
             ...buttonBase,
             backgroundColor: 'var(--accent)',
-            color: '#fff',
+            color: 'var(--on-accent)',
             border: '1px solid var(--accent)',
           }}
         >

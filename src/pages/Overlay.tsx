@@ -505,7 +505,7 @@ export const Overlay: React.FC = () => {
                   <button
                     onClick={triggerFolderRescan}
                     className="text-xs px-3 py-1 rounded transition-colors"
-                    style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+                    style={{ backgroundColor: 'var(--accent)', color: 'var(--on-accent)' }}
                   >
                     Rescan to index folders
                   </button>
