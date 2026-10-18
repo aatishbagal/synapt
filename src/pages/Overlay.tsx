@@ -11,12 +11,14 @@ import { DevicePicker } from '../components/DevicePicker';
 import { SearchLoadingBar } from '../components/SearchLoadingBar';
 import { TransferCard } from '../components/TransferCard';
 import { IndexingBanner } from '../components/IndexingBanner';
+import { EmptyState } from '../components/EmptyState';
 import { Peer, SearchResult, TrustedPeer, DeviceOption, IndexProgress, IpcStatus } from '../types';
 import { useTheme } from '../hooks/useTheme';
 import { useEntranceOnShow } from '../hooks/useEntranceOnShow';
 import { OVERLAY_ENTER } from '../animations';
 import { parseInput } from '../utils/parseInput';
 import { stepDown, stepUp } from '../utils/navigation';
+import { describeError } from '../utils/errors';
 
 interface IncomingPair {
   device_id: string;
@@ -164,7 +166,10 @@ export const Overlay: React.FC = () => {
 
   const triggerFolderRescan = () => {
     setRescanning(true);
-    invoke('trigger_reindex').catch(() => setRescanning(false));
+    invoke('trigger_reindex').catch(e => {
+      setRescanning(false);
+      setError(describeError(e, 'Could not start the rescan. Try again from Settings.'));
+    });
   };
 
   // Open the @ device picker while the input begins with @ and no device is yet
@@ -204,7 +209,7 @@ export const Overlay: React.FC = () => {
             setRemoteSearchLoading(false);
           })
           .catch(e => {
-            setError(String(e));
+            setError(describeError(e, `Could not search ${selectedDevice.device_name}. Try again.`));
             setResults([]);
             setRemoteSearchLoading(false);
           });
@@ -232,7 +237,7 @@ export const Overlay: React.FC = () => {
           setResults(await invoke<SearchResult[]>('search_local', { query: '/' + query }));
         }
       } catch (e) {
-        setError(String(e));
+        setError(describeError(e, 'Search failed. Try again, or rescan your folders in Settings.'));
         setResults([]);
       } finally {
         setLoading(false);
@@ -241,13 +246,20 @@ export const Overlay: React.FC = () => {
     return () => clearTimeout(handle);
   }, [parsedInput, selectedDevice, showDevicePicker, nav]);
 
+  // Hide only once the action has succeeded, so a failure stays on screen
+  // with an explanation instead of the overlay silently disappearing.
+  const runThenHide = (action: Promise<unknown>, failure: string) => {
+    action
+      .then(() => invoke('hide_window'))
+      .catch(e => setError(describeError(e, failure)));
+  };
+
   const openSelected = (result: SearchResult) => {
     if (result.result_type === 'App') {
-      invoke('launch_app', { exec: result.exec }).catch(() => {});
+      runThenHide(invoke('launch_app', { exec: result.exec }), `Could not open ${result.name}.`);
     } else {
-      invoke('open_file_path', { path: result.path }).catch(() => {});
+      runThenHide(invoke('open_file_path', { path: result.path }), `Could not open ${result.name}.`);
     }
-    invoke('hide_window').catch(() => {});
   };
 
   // Keyboard navigation is driven from the search input (which retains focus
@@ -287,12 +299,16 @@ export const Overlay: React.FC = () => {
       invoke('remote_launch_app', {
         deviceId: selectedDevice.device_id,
         appSourcePath: result.path,
-      }).catch(e => setError(String(e)));
+      }).catch(e =>
+        setError(describeError(e, `Could not open ${result.name} on ${selectedDevice.device_name}.`)),
+      );
     } else {
       invoke('request_file_cmd', {
         deviceId: selectedDevice.device_id,
         remotePath: result.path,
-      }).catch(e => setError(String(e)));
+      }).catch(e =>
+        setError(describeError(e, `Could not download ${result.name} from ${selectedDevice.device_name}.`)),
+      );
     }
   };
 
@@ -312,12 +328,10 @@ export const Overlay: React.FC = () => {
 
   const executeExpandedAction = (path: string, actionIndex: number) => {
     if (actionIndex === 0) {
-      invoke('open_file_path', { path }).catch(() => {});
-      invoke('hide_window').catch(() => {});
+      runThenHide(invoke('open_file_path', { path }), 'Could not open the file.');
       setExpandedResultPath(null);
     } else if (actionIndex === 1) {
-      invoke('reveal_in_files', { path }).catch(() => {});
-      invoke('hide_window').catch(() => {});
+      runThenHide(invoke('reveal_in_files', { path }), 'Could not show the file in your file manager.');
       setExpandedResultPath(null);
     } else {
       setExpandedResultPath(null);
@@ -405,11 +419,7 @@ export const Overlay: React.FC = () => {
     >
       <div
         className="flex items-center justify-between px-3 shrink-0"
-        style={{
-          height: '40px',
-          borderBottom: '1px solid var(--border)',
-          backgroundColor: 'var(--bg)',
-        }}
+        style={{ height: '40px', backgroundColor: 'var(--bg)' }}
       >
         <div className="flex items-center gap-2">
           <img
@@ -420,7 +430,7 @@ export const Overlay: React.FC = () => {
           <span className="text-xs font-medium">Synapt</span>
           {ipcStatus?.synaptclip_present && (
             <span className="text-xs" style={{ color: 'var(--muted)' }}>
-              | SynaptClip <span style={{ fontSize: '10px' }}>connected</span>
+              | SynaptClip connected
             </span>
           )}
         </div>
@@ -429,10 +439,10 @@ export const Overlay: React.FC = () => {
             type="button"
             onClick={() => nav('/settings')}
             title="Settings"
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors"
-            style={{ color: 'var(--muted)' }}
+            aria-label="Settings"
+            className="icon-button"
           >
-            <SettingsIcon size={12} />
+            <SettingsIcon size={14} />
           </button>
         </div>
       </div>
@@ -478,7 +488,7 @@ export const Overlay: React.FC = () => {
 
       <div className="flex-1 overflow-y-auto">
         {error && (
-          <p className="text-xs px-3 py-2" style={{ color: 'var(--danger)' }}>
+          <p role="alert" className="error-text px-4 py-2">
             {error}
           </p>
         )}
@@ -489,57 +499,54 @@ export const Overlay: React.FC = () => {
         )}
         {!loading && !remoteSearchLoading && !error && results.length === 0 && hasQuery && parsedInput.mode !== 'calc' && (
           selectedDevice ? (
-            <div className="flex flex-col items-center justify-center py-8 gap-1 px-6 text-center">
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>
-                No shared results from {selectedDevice.device_name}
-              </p>
-              <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                Remote search only returns files inside that device&rsquo;s shared
-                folders. Add a shared folder in Settings on {selectedDevice.device_name},
-                or it may still be indexing.
-              </p>
-            </div>
+            <EmptyState
+              title={`No shared results from ${selectedDevice.device_name}`}
+              detail={
+                <>
+                  Remote search only covers that device&rsquo;s shared folders. Add a shared
+                  folder in Settings on {selectedDevice.device_name}, or wait for it to finish
+                  indexing.
+                </>
+              }
+            />
           ) : parsedInput.mode === 'folder' ? (
             foldersIndexed === false ? (
-              <div className="flex flex-col items-center justify-center py-8 gap-2 px-6 text-center">
-                <p className="text-sm" style={{ color: 'var(--muted)' }}>
-                  {rescanning
-                    ? 'Reindexing - folders will appear when it finishes.'
-                    : 'Folders are not indexed yet.'}
-                </p>
-                {!rescanning && (
-                  <button
-                    onClick={triggerFolderRescan}
-                    className="text-xs px-3 py-1 rounded transition-colors"
-                    style={{ backgroundColor: 'var(--accent)', color: 'var(--on-accent)' }}
-                  >
-                    Rescan to index folders
-                  </button>
-                )}
-              </div>
+              <EmptyState
+                title={rescanning ? 'Rescanning folders' : 'Folders are not indexed yet'}
+                detail={
+                  rescanning
+                    ? 'Folders will appear here when the scan finishes.'
+                    : 'A rescan adds folder names to the search index.'
+                }
+                action={
+                  !rescanning && (
+                    <button type="button" onClick={triggerFolderRescan} className="btn btn-primary">
+                      Rescan folders
+                    </button>
+                  )
+                }
+              />
             ) : (
-              <div className="flex items-center justify-center py-8">
-                <p className="text-sm" style={{ color: 'var(--muted)' }}>
-                  No folders match &ldquo;{parsedInput.query}&rdquo;
-                </p>
-              </div>
+              <EmptyState
+                title={`No folders match \u201c${parsedInput.query}\u201d`}
+                detail="Check the spelling, or search for files without the leading /."
+              />
             )
           ) : noIndexedDirs ? (
-            <div className="flex-1 flex items-center justify-center py-8">
-              <button
-                onClick={() => nav('/settings')}
-                className="text-sm transition-colors"
-                style={{ color: 'var(--muted)' }}
-              >
-                Add directories to index in Settings to start searching
-              </button>
-            </div>
+            <EmptyState
+              title="Nothing is indexed yet"
+              detail="Choose the folders Synapt should search."
+              action={
+                <button type="button" onClick={() => nav('/settings')} className="btn btn-primary">
+                  Open Settings
+                </button>
+              }
+            />
           ) : (
-            <div className="flex items-center justify-center py-8">
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>
-                No results for &ldquo;{parsedInput.query}&rdquo;
-              </p>
-            </div>
+            <EmptyState
+              title={`No results for \u201c${parsedInput.query}\u201d`}
+              detail="Check the spelling, or add more folders to the index in Settings."
+            />
           )
         )}
         {!hasQuery &&
@@ -548,28 +555,18 @@ export const Overlay: React.FC = () => {
           !remoteSearchLoading &&
           !error &&
           results.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full px-6 text-center">
-              <p className="text-sm font-medium mb-3" style={{ color: 'var(--text)' }}>
-                Try searching
-              </p>
-              <div className="flex flex-col gap-1.5">
-                <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                  Type to search files and apps
-                </p>
-                <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                  <span style={{ color: 'var(--accent)' }}>/</span> to find folders
-                </p>
-                <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                  <span style={{ color: 'var(--accent)' }}>@</span> to search a paired device
-                </p>
-                <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                  <span style={{ color: 'var(--accent)' }}>Right arrow</span> on a file for actions
-                </p>
-                <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                  Type a calculation like 45 * 12
-                </p>
-              </div>
-            </div>
+            <EmptyState
+              title="Try searching"
+              detail={
+                <div className="flex flex-col gap-1">
+                  <p>Type to search files and apps</p>
+                  <p>/ to find folders</p>
+                  <p>@ to search a paired device</p>
+                  <p>Right arrow on a file for actions</p>
+                  <p>Type a calculation like 45 * 12</p>
+                </div>
+              }
+            />
           )}
         {results.length > 0 && (
           <ResultList

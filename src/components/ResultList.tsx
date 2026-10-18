@@ -98,7 +98,7 @@ export const ResultList: React.FC<Props> = ({
 
   // popLayout pops removed rows out of flow, so the wrapper must be positioned.
   return (
-    <div style={{ position: 'relative' }}>
+    <div role="listbox" aria-label="Results" style={{ position: 'relative' }}>
       <AnimatePresence mode="popLayout">
         {results.map((result, index) => {
           const selected = index === selectedIndex;
@@ -118,12 +118,11 @@ export const ResultList: React.FC<Props> = ({
                 ref={selected ? selectedRowRef : undefined}
                 onClick={() => onSelect(result)}
                 onMouseEnter={() => onHover(index)}
-                className="flex items-center justify-between gap-2 px-3 py-2.5 cursor-pointer transition-colors"
-                style={{
-                  position: 'relative',
-                  borderBottom: '1px solid var(--border)',
-                  backgroundColor: selected ? 'var(--surface-hover)' : 'transparent',
-                }}
+                role="option"
+                aria-selected={selected}
+                data-selected={selected}
+                className="list-row flex items-center justify-between gap-2"
+                style={{ position: 'relative' }}
               >
                 <AnimatePresence>
                   {confirming && (
@@ -136,7 +135,7 @@ export const ResultList: React.FC<Props> = ({
                     />
                   )}
                 </AnimatePresence>
-                <div className="flex items-center flex-1 min-w-0" style={{ gap: '10px' }}>
+                <div className="flex items-center flex-1 min-w-0 gap-3">
                   {isApp ? (
                     <AppIcon iconPath={result.icon_path} size={20} />
                   ) : (
@@ -147,7 +146,7 @@ export const ResultList: React.FC<Props> = ({
                       {resultsAreFolders ? <FolderIcon /> : <FileIcon />}
                     </span>
                   )}
-                  <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                  <div className="flex-1 min-w-0 flex flex-col">
                     <span
                       className="truncate text-[13px]"
                       style={{ color: 'var(--text)', fontWeight: isApp ? 500 : 400 }}
@@ -160,21 +159,10 @@ export const ResultList: React.FC<Props> = ({
                   </div>
                 </div>
                 {!isApp && (
+                  // Plain text label, not a badge: where the file lives.
                   <span
-                    className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
-                    style={
-                      remote
-                        ? {
-                            backgroundColor: 'var(--surface-hover)',
-                            color: 'var(--accent)',
-                            border: '1px solid var(--accent)',
-                          }
-                        : {
-                            backgroundColor: 'var(--surface-hover)',
-                            color: 'var(--muted)',
-                            border: '1px solid var(--border)',
-                          }
-                    }
+                    className="text-xs shrink-0"
+                    style={{ color: remote ? 'var(--text)' : 'var(--muted)' }}
                   >
                     {sourceLabel(result.source)}
                   </span>
@@ -183,10 +171,10 @@ export const ResultList: React.FC<Props> = ({
 
               {expanded && !sending && (
                 <div
+                  role="menu"
+                  aria-label={`Actions for ${result.name}`}
                   style={{
                     backgroundColor: 'var(--surface)',
-                    border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
-                    borderTop: '1px solid var(--border)',
                     borderRadius: '0 0 8px 8px',
                     padding: '4px 0',
                   }}
@@ -196,19 +184,20 @@ export const ResultList: React.FC<Props> = ({
                     return (
                       <div
                         key={label}
+                        role="menuitem"
+                        aria-current={actionSelected}
                         onMouseEnter={() => onActionHover?.(actionIndex)}
                         onClick={e => {
                           e.stopPropagation();
                           onActionExecute?.(result.path, actionIndex);
                         }}
+                        // Left padding lines the label up with the row text above.
                         className="cursor-pointer transition-colors"
                         style={{
-                          padding: '8px 16px 8px 36px',
+                          padding: '8px 16px 8px 48px',
                           fontSize: '13px',
                           color: actionSelected ? 'var(--accent)' : 'var(--text)',
-                          backgroundColor: actionSelected
-                            ? 'color-mix(in srgb, var(--accent) 10%, transparent)'
-                            : 'transparent',
+                          backgroundColor: actionSelected ? 'var(--surface-hover)' : 'transparent',
                         }}
                       >
                         {label}

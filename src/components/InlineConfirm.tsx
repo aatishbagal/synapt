@@ -5,14 +5,20 @@ import { INLINE_CONFIRM } from '../animations';
 interface Props {
   message: string;
   confirmLabel?: string;
+  /** 'danger' marks an action that removes something and cannot be undone. */
+  tone?: 'default' | 'danger';
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-/** Inline confirmation overlaid on a result row, e.g. before a remote download. */
+/**
+ * Inline confirmation overlaid on its positioned parent, e.g. a result row
+ * before a remote download or a Settings card before removing a device.
+ */
 export const InlineConfirm: React.FC<Props> = ({
   message,
   confirmLabel = 'Download',
+  tone = 'default',
   onConfirm,
   onCancel,
 }) => {
@@ -46,13 +52,6 @@ export const InlineConfirm: React.FC<Props> = ({
     }
   };
 
-  const buttonBase: React.CSSProperties = {
-    borderRadius: '4px',
-    padding: '4px 12px',
-    fontSize: '12px',
-    cursor: 'pointer',
-  };
-
   return (
     <motion.div
       initial={reduceMotion ? { opacity: 0 } : INLINE_CONFIRM.initial}
@@ -75,32 +74,20 @@ export const InlineConfirm: React.FC<Props> = ({
     >
       {/* Padding lives on an inner box so the outer one can animate to height 0. */}
       <div style={{ padding: '8px 12px' }}>
-        <p style={{ color: 'var(--text)', fontSize: '13px' }}>{message}</p>
+        <p role="alert" style={{ color: 'var(--text)', fontSize: '13px' }}>{message}</p>
         <div className="flex items-center gap-2" style={{ marginTop: '8px' }}>
+          {/* DESIGN.md: secondary-weight confirm with accent text (danger text for
+              removals), plain muted cancel. */}
           <button
             ref={confirmRef}
             type="button"
             onClick={onConfirm}
-            style={{
-              ...buttonBase,
-              backgroundColor: 'var(--accent)',
-              color: 'var(--on-accent)',
-              border: '1px solid var(--accent)',
-            }}
+            className={tone === 'danger' ? 'btn btn-destructive' : 'btn btn-secondary'}
+            style={tone === 'danger' ? undefined : { color: 'var(--accent)' }}
           >
             {confirmLabel}
           </button>
-          <button
-            ref={cancelRef}
-            type="button"
-            onClick={onCancel}
-            style={{
-              ...buttonBase,
-              backgroundColor: 'transparent',
-              color: 'var(--muted)',
-              border: '1px solid var(--border)',
-            }}
-          >
+          <button ref={cancelRef} type="button" onClick={onCancel} className="btn btn-ghost">
             Cancel
           </button>
         </div>

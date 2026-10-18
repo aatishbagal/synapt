@@ -11,6 +11,9 @@ import { useTheme } from '../hooks/useTheme';
 import { useHotkeyInfo } from '../hooks/useHotkeyInfo';
 import { Select } from '../components/Select';
 import { UnderlineLoader } from '../components/UnderlineLoader';
+import { InlineConfirm } from '../components/InlineConfirm';
+import { AnimatePresence } from 'motion/react';
+import { describeError } from '../utils/errors';
 
 interface LocalIdentity {
   device_id: string;
@@ -74,29 +77,15 @@ function isPrivateLanIp(ip: string): boolean {
   return false;
 }
 
-const inputStyle: React.CSSProperties = {
-  backgroundColor: 'var(--surface)',
-  color: 'var(--text)',
-  border: '1px solid var(--border)',
-};
-
-const subtleButton: React.CSSProperties = {
-  backgroundColor: 'var(--surface)',
-  color: 'var(--text)',
-  border: '1px solid var(--border)',
-};
-
-const accentButton: React.CSSProperties = {
+/// Active state of a toggle button (segmented tabs, hotkey recorder), per the
+/// DESIGN.md interactive states: --surface-hover fill with an --accent label.
+const activeToggle: React.CSSProperties = {
   backgroundColor: 'var(--surface-hover)',
   color: 'var(--accent)',
-  border: '1px solid var(--accent)',
 };
 
-const dangerButton: React.CSSProperties = {
-  backgroundColor: 'var(--surface)',
-  color: 'var(--danger)',
-  border: '1px solid var(--border)',
-};
+/// Settings sections that can report a failed action next to where it happened.
+type SectionKey = 'device' | 'trusted' | 'shared' | 'indexed' | 'preferences' | 'about';
 
 /// An update offered by the endpoint, as returned by the check_for_update command.
 interface UpdateInfo {
@@ -221,6 +210,17 @@ export const Settings: React.FC = () => {
   // a healthy install.
   const [crashLogPath, setCrashLogPath] = useState<string | null>(null);
 
+  // A failed action is reported inside the section it came from, in plain
+  // language, instead of being swallowed.
+  const [sectionErrors, setSectionErrors] = useState<Partial<Record<SectionKey, string>>>({});
+  const fail = useCallback((section: SectionKey, error: unknown, fallback: string) => {
+    setSectionErrors(prev => ({ ...prev, [section]: describeError(error, fallback) }));
+  }, []);
+  const clearError = useCallback((section: SectionKey) => {
+    setSectionErrors(prev => (prev[section] ? { ...prev, [section]: undefined } : prev));
+  }, []);
+  const [confirmRemovePeer, setConfirmRemovePeer] = useState<string | null>(null);
+
   // --- Add Device (manual pairing) ---
   const [pairTab, setPairTab] = useState<'enter' | 'show'>('enter');
   const [pairInput, setPairInput] = useState('');
@@ -245,7 +245,7 @@ export const Settings: React.FC = () => {
       const info = await invoke<UpdateInfo | null>('check_for_update');
       setUpdateState(info ? { kind: 'available', info } : { kind: 'none' });
     } catch (e) {
-      setUpdateState({ kind: 'error', message: String(e) });
+      setUpdateState({ kind: 'error', message: describeError(e, 'Check your internet connection and try again.') });
     } finally {
       await coreCheck;
     }
@@ -261,8 +261,11 @@ export const Settings: React.FC = () => {
 
   const toggleAutoUpdate = useCallback((enabled: boolean) => {
     setAutoUpdate(enabled);
-    invoke('set_setting', { key: 'auto_update_check', value: String(enabled) }).catch(() => {});
-  }, []);
+    invoke('set_setting', { key: 'auto_update_check', value: String(enabled) }).catch(e => {
+      setAutoUpdate(!enabled);
+      fail('about', e, 'Could not save this setting. Try again.');
+    });
+  }, [fail]);
 
   const installUpdate = useCallback(async () => {
     setUpdateState({ kind: 'installing' });
@@ -270,7 +273,7 @@ export const Settings: React.FC = () => {
       // Succeeds by restarting into the new version, so nothing follows it.
       await invoke('install_update');
     } catch (e) {
-      setUpdateState({ kind: 'error', message: `Install failed: ${String(e)}` });
+      setUpdateState({ kind: 'error', message: describeError(e, 'The update could not be installed. Try again later.') });
     }
   }, []);
 
@@ -280,7 +283,7 @@ export const Settings: React.FC = () => {
       setInviteError('');
     } catch (e) {
       setInviteInfo(null);
-      setInviteError(String(e));
+      setInviteError(describeError(e, 'Could not create an invite code. Check your network connection and try again.'));
     }
   }, []);
 
@@ -417,7 +420,7 @@ export const Settings: React.FC = () => {
         setDeviceName(id.device_name);
       }
     } catch (e) {
-      setDeviceNameError(String(e));
+      setDeviceNameError(describeError(e, 'Could not save the device name. Try again.'));
     }
   };
 
@@ -454,7 +457,7 @@ export const Settings: React.FC = () => {
       setManualVerify(verify);
       setPairInput('');
     } catch (e) {
-      setPairError(e instanceof Error ? e.message : String(e));
+      setPairError(describeError(e, 'Pairing failed. Check the address or code and try again.'));
     } finally {
       setPairBusy(false);
     }
@@ -467,7 +470,11 @@ export const Settings: React.FC = () => {
 
   // --- Trusted Devices ---
   const removePeer = async (deviceId: string) => {
-    await invoke('revoke_peer_cmd', { deviceId }).catch(() => undefined);
+    setConfirmRemovePeer(null);
+    clearError('trusted');
+    await invoke('revoke_peer_cmd', { deviceId }).catch(e =>
+      fail('trusted', e, 'Could not remove the device. Try again.'),
+    );
     await loadTrusted();
   };
 
@@ -475,11 +482,17 @@ export const Settings: React.FC = () => {
   const addSharedDir = async () => {
     const path = await invoke<string | null>('open_dir_picker').catch(() => null);
     if (!path) return;
-    await invoke('add_shared_dir', { path }).catch(() => undefined);
+    clearError('shared');
+    await invoke('add_shared_dir', { path }).catch(e =>
+      fail('shared', e, 'Could not share that folder. Try again.'),
+    );
     await loadSharedDirs();
   };
   const removeSharedDir = async (path: string) => {
-    await invoke('remove_shared_dir', { path }).catch(() => undefined);
+    clearError('shared');
+    await invoke('remove_shared_dir', { path }).catch(e =>
+      fail('shared', e, 'Could not stop sharing that folder. Try again.'),
+    );
     await loadSharedDirs();
   };
 
@@ -488,17 +501,24 @@ export const Settings: React.FC = () => {
     const path = await invoke<string | null>('open_dir_picker').catch(() => null);
     if (!path) return;
     setRescanning(true);
-    await invoke('add_indexed_dir', { path }).catch(() => undefined);
+    clearError('indexed');
+    await invoke('add_indexed_dir', { path }).catch(e =>
+      fail('indexed', e, 'Could not add that folder to the index. Try again.'),
+    );
     await loadIndexedDirs();
     setRescanning(false);
   };
   const removeIndexedDir = async (path: string) => {
-    await invoke('remove_indexed_dir', { path }).catch(() => undefined);
+    clearError('indexed');
+    await invoke('remove_indexed_dir', { path }).catch(e =>
+      fail('indexed', e, 'Could not remove that folder from the index. Try again.'),
+    );
     await loadIndexedDirs();
   };
   const rescanAll = async () => {
     setRescanning(true);
-    await invoke('trigger_reindex').catch(() => undefined);
+    clearError('indexed');
+    await invoke('trigger_reindex').catch(e => fail('indexed', e, 'Could not start the rescan. Try again.'));
     await loadIndexedDirs();
     setRescanning(false);
   };
@@ -534,7 +554,7 @@ export const Settings: React.FC = () => {
         await invoke('set_hotkey', { hotkey: combo });
         setHotkey(combo);
       } catch (error) {
-        setHotkeyError(String(error));
+        setHotkeyError(describeError(error, 'That shortcut could not be registered. Try a different combination.'));
       }
       setRecording(false);
     };
@@ -550,32 +570,49 @@ export const Settings: React.FC = () => {
   const changeDownloadDir = async () => {
     const path = await invoke<string | null>('open_dir_picker').catch(() => null);
     if (!path) return;
+    const previous = downloadDir;
     setDownloadDir(path);
-    await invoke('set_setting', { key: 'download_dir', value: path }).catch(() => undefined);
+    await savePreference('download_dir', path, () => setDownloadDir(previous));
+  };
+  /// Persist one preference; on failure undo the optimistic UI change and say so.
+  const savePreference = async (key: string, value: string, revert: () => void) => {
+    clearError('preferences');
+    try {
+      await invoke('set_setting', { key, value });
+    } catch (e) {
+      revert();
+      fail('preferences', e, 'Could not save this setting. Try again.');
+    }
   };
   const saveMaxResults = async () => {
-    await invoke('set_setting', { key: 'max_results', value: String(maxResults) }).catch(() => undefined);
+    await savePreference('max_results', String(maxResults), () => undefined);
   };
   const toggleIncludeHidden = async (checked: boolean) => {
     setIncludeHidden(checked);
-    await invoke('set_setting', { key: 'include_hidden', value: String(checked) }).catch(() => undefined);
+    await savePreference('include_hidden', String(checked), () => setIncludeHidden(!checked));
   };
   const toggleNotifications = async (checked: boolean) => {
     setNotifications(checked);
-    await invoke('set_setting', { key: 'notifications_enabled', value: String(checked) }).catch(() => undefined);
+    await savePreference('notifications_enabled', String(checked), () => setNotifications(!checked));
   };
   const toggleAutostart = async (checked: boolean) => {
     setAutostart(checked);
+    clearError('preferences');
     try {
       await invoke('set_autostart', { enabled: checked });
-    } catch {
+    } catch (e) {
       setAutostart(!checked);
+      fail('preferences', e, 'Could not change the start-on-login setting. Try again.');
     }
   };
   const changeTheme = async (value: string) => {
+    const previous = theme;
     setTheme(value);
     applyTheme(value);
-    await invoke('set_setting', { key: 'theme', value }).catch(() => undefined);
+    await savePreference('theme', value, () => {
+      setTheme(previous);
+      applyTheme(previous);
+    });
   };
 
   return (
@@ -594,23 +631,21 @@ export const Settings: React.FC = () => {
         <button
           type="button"
           onClick={() => nav('/')}
-          title="Back"
-          className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors"
-          style={{ color: 'var(--muted)' }}
+          title="Back to search"
+          className="icon-button icon-button-labeled"
         >
           <ArrowLeft size={12} />
-          Back
+          <span>Back</span>
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-5">
+      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-6">
         {/* 1. Device */}
-        <Section title="Device">
+        <Section title="Device" error={sectionErrors.device}>
           <div className="flex flex-col gap-3 px-3 py-2 rounded" style={itemCard}>
             <div>
               <input
-                className="rounded px-2 py-1 text-xs w-full"
-                style={inputStyle}
+                className="input w-full"
                 value={deviceName}
                 onChange={e => setDeviceName(e.target.value)}
                 onBlur={saveDeviceName}
@@ -618,7 +653,7 @@ export const Settings: React.FC = () => {
                 maxLength={64}
               />
               {deviceNameError && (
-                <p className="text-xs mt-1" style={{ color: 'var(--danger)' }}>{deviceNameError}</p>
+                <p role="alert" className="error-text mt-1">{deviceNameError}</p>
               )}
             </div>
             <p className="text-xs break-all" style={{ color: 'var(--muted)', fontFamily: 'monospace' }}>
@@ -631,15 +666,31 @@ export const Settings: React.FC = () => {
         </Section>
 
         {/* 2. Trusted Devices */}
-        <Section title="Trusted Devices">
+        <Section title="Trusted Devices" error={sectionErrors.trusted}>
           {trusted.length === 0 ? (
             <p className="text-xs" style={{ color: 'var(--muted)' }}>
-              No trusted devices. Pair a device from the main screen.
+              No paired devices yet. Use Add Device below to pair one.
             </p>
           ) : (
             <div className="flex flex-col gap-2">
               {trusted.map(p => (
-                <div key={p.device_id} className="flex items-center justify-between px-3 py-2" style={itemCard}>
+                <div
+                  key={p.device_id}
+                  className="flex items-center justify-between px-3 py-2"
+                  style={{ ...itemCard, position: 'relative' }}
+                >
+                  <AnimatePresence>
+                    {confirmRemovePeer === p.device_id && (
+                      <InlineConfirm
+                        key="remove"
+                        tone="danger"
+                        message={`Remove ${p.device_name}? You will need to pair it again to share files.`}
+                        confirmLabel="Remove"
+                        onConfirm={() => void removePeer(p.device_id)}
+                        onCancel={() => setConfirmRemovePeer(null)}
+                      />
+                    )}
+                  </AnimatePresence>
                   <div className="min-w-0">
                     <p className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{p.device_name}</p>
                     <p className="text-xs" style={{ color: 'var(--muted)', fontFamily: 'monospace' }}>{p.fingerprint.slice(0, 16)}</p>
@@ -647,7 +698,7 @@ export const Settings: React.FC = () => {
                       paired {relativeDate(p.paired_at)} | last seen {relativeDate(p.last_seen)}
                     </p>
                   </div>
-                  <button onClick={() => removePeer(p.device_id)} className="rounded px-2 py-1 text-xs shrink-0 ml-2 transition-colors" style={dangerButton}>Remove</button>
+                  <button onClick={() => setConfirmRemovePeer(p.device_id)} className="btn btn-destructive shrink-0 ml-2">Remove</button>
                 </div>
               ))}
             </div>
@@ -661,8 +712,9 @@ export const Settings: React.FC = () => {
               <button
                 key={tab}
                 onClick={() => setPairTab(tab)}
-                className="rounded px-2 py-1 text-xs transition-colors"
-                style={pairTab === tab ? accentButton : subtleButton}
+                aria-pressed={pairTab === tab}
+                className="btn btn-secondary"
+                style={pairTab === tab ? activeToggle : undefined}
               >
                 {tab === 'enter' ? 'Enter IP or code' : 'Show my code'}
               </button>
@@ -687,20 +739,18 @@ export const Settings: React.FC = () => {
                   placeholder="IP address or invite code"
                   spellCheck={false}
                   autoCapitalize="characters"
-                  className="flex-1 rounded px-2 py-1 text-xs outline-none"
-                  style={inputStyle}
+                  className="input flex-1"
                 />
                 <button
                   onClick={() => void startManualPair()}
                   disabled={pairBusy || pairInput.trim().length === 0}
-                  className="rounded px-2 py-1 text-xs shrink-0 transition-colors disabled:opacity-50"
-                  style={accentButton}
+                  className="btn btn-primary shrink-0"
                 >
                   {pairBusy ? 'Connecting...' : 'Connect and Pair'}
                 </button>
               </div>
               {pairError && (
-                <p className="text-xs" style={{ color: 'var(--danger)' }}>{pairError}</p>
+                <p role="alert" className="error-text">{pairError}</p>
               )}
               <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
                 Enter the IP address shown on the other device, or paste their invite code.
@@ -709,7 +759,7 @@ export const Settings: React.FC = () => {
           ) : (
             <div className="flex flex-col gap-2">
               {inviteError ? (
-                <p className="text-xs" style={{ color: 'var(--danger)' }}>{inviteError}</p>
+                <p role="alert" className="error-text">{inviteError}</p>
               ) : (
                 <p
                   className="text-center"
@@ -743,11 +793,7 @@ export const Settings: React.FC = () => {
                   )}
                 </>
               )}
-              <button
-                onClick={() => void loadInviteCode()}
-                className="text-[11px] self-start transition-colors"
-                style={{ color: 'var(--muted)', background: 'none', border: 'none', padding: 0 }}
-              >
+              <button onClick={() => void loadInviteCode()} className="btn btn-ghost self-start">
                 Generate new code
               </button>
             </div>
@@ -757,7 +803,8 @@ export const Settings: React.FC = () => {
         {/* 4. Shared Directories */}
         <Section
           title="Shared Directories"
-          action={<button onClick={addSharedDir} className="rounded px-2 py-1 text-xs transition-colors" style={subtleButton}>Add</button>}
+          error={sectionErrors.shared}
+          action={<button onClick={addSharedDir} className="btn btn-secondary">Add</button>}
         >
           {sharedDirs.length === 0 ? (
             <p className="text-xs" style={{ color: 'var(--muted)' }}>
@@ -768,7 +815,7 @@ export const Settings: React.FC = () => {
               {sharedDirs.map(d => (
                 <div key={d} className="flex items-center justify-between px-3 py-2" style={itemCard}>
                   <p className="text-xs break-all" style={{ color: 'var(--text)', fontFamily: 'monospace' }}>{d}</p>
-                  <button onClick={() => removeSharedDir(d)} className="rounded px-2 py-1 text-xs shrink-0 ml-2 transition-colors" style={dangerButton}>Remove</button>
+                  <button onClick={() => removeSharedDir(d)} className="btn btn-destructive shrink-0 ml-2">Remove</button>
                 </div>
               ))}
             </div>
@@ -779,12 +826,13 @@ export const Settings: React.FC = () => {
         {/* 5. Indexed Directories */}
         <Section
           title="Indexed Directories"
+          error={sectionErrors.indexed}
           action={
             <div className="flex gap-2">
-              <button onClick={rescanAll} disabled={rescanning} className="rounded px-2 py-1 text-xs transition-colors disabled:opacity-50" style={subtleButton}>
+              <button onClick={rescanAll} disabled={rescanning} className="btn btn-secondary">
                 {rescanning ? 'Scanning...' : 'Rescan All'}
               </button>
-              <button onClick={addIndexedDir} disabled={rescanning} className="rounded px-2 py-1 text-xs transition-colors disabled:opacity-50" style={accentButton}>Add</button>
+              <button onClick={addIndexedDir} disabled={rescanning} className="btn btn-primary">Add</button>
             </div>
           }
         >
@@ -802,13 +850,13 @@ export const Settings: React.FC = () => {
                       {d.file_count.toLocaleString()} files | scanned {relativeDate(d.last_indexed)}
                     </p>
                   </div>
-                  <button onClick={() => removeIndexedDir(d.path)} className="rounded px-2 py-1 text-xs shrink-0 ml-2 transition-colors" style={dangerButton}>Remove</button>
+                  <button onClick={() => removeIndexedDir(d.path)} className="btn btn-destructive shrink-0 ml-2">Remove</button>
                 </div>
               ))}
             </div>
           )}
           {indexStatus && (
-            <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
+            <div role="status" className="flex items-center gap-2" style={{ marginTop: 8 }}>
               {indexActive && <UnderlineLoader state="active" width={20} />}
               <p className="text-xs" style={{ color: 'var(--muted)' }}>{indexStatus}</p>
             </div>
@@ -830,8 +878,9 @@ export const Settings: React.FC = () => {
                 if (shortcut.info?.wayland) void shortcut.configure();
                 else setRecording(r => !r);
               }}
-              className="rounded px-2 py-1 text-xs shrink-0 ml-2 transition-colors"
-              style={recording ? accentButton : subtleButton}
+              aria-pressed={recording}
+              className="btn btn-secondary shrink-0 ml-2"
+              style={recording ? activeToggle : undefined}
             >
               {shortcut.busy ? 'Waiting for desktop...' : shortcut.info?.wayland ? 'Configure shortcut' : recording ? 'Press any key...' : 'Change'}
             </button>
@@ -842,14 +891,14 @@ export const Settings: React.FC = () => {
             </p>
           )}
           {(shortcut.error || shortcut.info?.error || hotkeyError) && (
-            <p className="text-xs" style={{ color: 'var(--danger)' }}>
+            <p role="alert" className="error-text">
               {shortcut.error || shortcut.info?.error || hotkeyError}
             </p>
           )}
         </Section>
 
         {/* 7. Preferences */}
-        <Section title="Preferences">
+        <Section title="Preferences" error={sectionErrors.preferences}>
           <div className="flex flex-col gap-3 px-3 py-2 rounded" style={itemCard}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs" style={{ color: 'var(--text)' }}>Download directory</span>
@@ -857,7 +906,7 @@ export const Settings: React.FC = () => {
                 <span className="text-xs truncate" style={{ color: 'var(--muted)', fontFamily: 'monospace', maxWidth: '18rem' }} title={downloadDir || 'Default'}>
                   {downloadDir || 'Default (Downloads/Synapt)'}
                 </span>
-                <button onClick={changeDownloadDir} className="rounded px-2 py-1 text-xs shrink-0 transition-colors" style={subtleButton}>Change</button>
+                <button onClick={changeDownloadDir} className="btn btn-secondary shrink-0">Change</button>
               </div>
             </div>
 
@@ -868,8 +917,7 @@ export const Settings: React.FC = () => {
                 min={10}
                 max={200}
                 step={5}
-                className="rounded px-2 py-1 text-xs w-24"
-                style={inputStyle}
+                className="input w-24"
                 value={maxResults}
                 onChange={e => setMaxResults(e.target.value)}
                 onBlur={saveMaxResults}
@@ -937,7 +985,7 @@ export const Settings: React.FC = () => {
         </Section>
 
         {/* 9. About */}
-        <Section title="About">
+        <Section title="About" error={sectionErrors.about}>
           <div className="flex flex-col gap-1 px-3 py-2 rounded" style={itemCard}>
             <p className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>Synapt</p>
             <p className="text-xs" style={{ color: 'var(--muted)' }}>Version {appVersion}</p>
@@ -945,36 +993,24 @@ export const Settings: React.FC = () => {
             <a href={REPO_URL} target="_blank" rel="noreferrer" className="text-xs" style={{ color: 'var(--accent)' }}>
               {REPO_URL}
             </a>
-            <div className="flex flex-col gap-1.5 mt-1">
+            <div className="flex flex-col gap-2 mt-1">
               {/* Integration API */}
               <div className="flex items-center justify-between">
                 <span className="text-xs" style={{ color: 'var(--muted)' }}>Integration API</span>
-                <span className="flex items-center gap-1.5">
-                  <span
-                    className="inline-block rounded-full"
-                    style={{ width: 7, height: 7, backgroundColor: ipcStatus.api_active ? 'var(--accent)' : 'var(--border)' }}
-                  />
-                  <span className="text-xs" style={{ color: ipcStatus.api_active ? 'var(--accent)' : 'var(--muted)' }}>
-                    {ipcStatus.api_active ? 'Active' : 'Inactive'}
-                  </span>
+                <span className="text-xs" style={{ color: ipcStatus.api_active ? 'var(--text)' : 'var(--muted)' }}>
+                  {ipcStatus.api_active ? 'Active' : 'Inactive'}
                 </span>
               </div>
               {/* SynaptClip */}
               <div className="flex items-center justify-between">
                 <span className="text-xs" style={{ color: 'var(--muted)' }}>SynaptClip</span>
-                <span className="flex items-center gap-1.5">
-                  <span
-                    className="inline-block rounded-full"
-                    style={{ width: 7, height: 7, backgroundColor: ipcStatus.synaptclip_present ? 'var(--accent)' : 'var(--border)' }}
-                  />
-                  <span className="text-xs" style={{ color: ipcStatus.synaptclip_present ? 'var(--accent)' : 'var(--muted)' }}>
-                    {ipcStatus.synaptclip_present ? 'Detected' : 'Not running'}
-                  </span>
+                <span className="text-xs" style={{ color: ipcStatus.synaptclip_present ? 'var(--text)' : 'var(--muted)' }}>
+                  {ipcStatus.synaptclip_present ? 'Detected' : 'Not running'}
                 </span>
               </div>
               <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
                 {ipcStatus.synaptclip_present
-                  ? `${ipcStatus.peer_count} peer(s) available for clipboard sync`
+                  ? `${ipcStatus.peer_count} ${ipcStatus.peer_count === 1 ? 'device' : 'devices'} available for clipboard sync`
                   : 'Install SynaptClip to enable cross-device clipboard sync'}
               </p>
               {/* Updates */}
@@ -993,8 +1029,7 @@ export const Settings: React.FC = () => {
                     <button
                       type="button"
                       onClick={installUpdate}
-                      className="rounded px-2 py-1 text-xs shrink-0 transition-colors"
-                      style={accentButton}
+                      className="btn btn-primary shrink-0"
                     >
                       Install and restart
                     </button>
@@ -1003,8 +1038,7 @@ export const Settings: React.FC = () => {
                       type="button"
                       onClick={checkForUpdate}
                       disabled={busy}
-                      className="rounded px-2 py-1 text-xs shrink-0 transition-colors"
-                      style={{ ...subtleButton, opacity: busy ? 0.5 : 1 }}
+                      className="btn btn-secondary shrink-0"
                     >
                       {updateState.kind === 'idle' ? 'Check for updates' : 'Check again'}
                     </button>
@@ -1032,7 +1066,7 @@ export const Settings: React.FC = () => {
                 </label>
               </div>
               {crashLogPath && (
-                <div className="flex flex-col gap-0.5 mt-1">
+                <div className="flex flex-col mt-1">
                   <p className="text-[11px] break-all" style={{ color: 'var(--muted)' }}>
                     Crash log: {crashLogPath}
                   </p>
@@ -1041,7 +1075,9 @@ export const Settings: React.FC = () => {
                     className="text-[11px] text-left"
                     style={{ color: 'var(--accent)' }}
                     onClick={() => {
-                      invoke('reveal_in_files', { path: crashLogPath }).catch(() => {});
+                      invoke('reveal_in_files', { path: crashLogPath }).catch(e =>
+                        fail('about', e, 'Could not open the file manager.'),
+                      );
                     }}
                   >
                     Open in file manager
@@ -1074,19 +1110,25 @@ export const Settings: React.FC = () => {
 interface SectionProps {
   title: string;
   action?: React.ReactNode;
+  /** Plain-language message for the last failed action in this section. */
+  error?: string;
   children: React.ReactNode;
 }
 
-function Section({ title, action, children }: SectionProps) {
+function Section({ title, action, error, children }: SectionProps) {
+  // gap-2 supplies the heading's 8px bottom margin, so it is zeroed here.
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <h2 className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-          {title}
-        </h2>
+        <h2 className="section-heading mb-0">{title}</h2>
         {action}
       </div>
       {children}
+      {error && (
+        <p role="alert" className="error-text">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

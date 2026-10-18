@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { DeviceOption } from '../types';
+import { describeError } from '../utils/errors';
 
 interface Props {
   devices: DeviceOption[];
@@ -12,6 +13,8 @@ interface Props {
 export const DeviceMultiSelect: React.FC<Props> = ({ devices, filePath, onClose }) => {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [focusIndex, setFocusIndex] = useState(0);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,12 +31,26 @@ export const DeviceMultiSelect: React.FC<Props> = ({ devices, filePath, onClose 
     });
   };
 
-  const send = () => {
-    if (selected.size === 0) return;
-    for (const deviceId of selected) {
-      invoke('send_files_cmd', { deviceId, localPaths: [filePath] }).catch(() => {});
+  // Stay open until every send has been handed off, so a device that cannot
+  // be reached is reported here rather than the panel closing on a failure.
+  const send = async () => {
+    if (selected.size === 0 || sending) return;
+    setSending(true);
+    setSendError(null);
+    const targets = devices.filter(d => selected.has(d.device_id));
+    const results = await Promise.allSettled(
+      targets.map(d => invoke('send_files_cmd', { deviceId: d.device_id, localPaths: [filePath] })),
+    );
+    const failed = targets.filter((_, i) => results[i].status === 'rejected');
+    setSending(false);
+    if (failed.length === 0) {
+      onClose();
+      return;
     }
-    onClose();
+    const first = results.find(r => r.status === 'rejected') as PromiseRejectedResult;
+    const names = failed.map(d => d.device_name).join(', ');
+    setSendError(`Could not send to ${names}. ${describeError(first.reason, 'Try again.')}`);
+    setSelected(new Set(failed.map(d => d.device_id)));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -52,7 +69,7 @@ export const DeviceMultiSelect: React.FC<Props> = ({ devices, filePath, onClose 
         break;
       case 'Enter':
         e.preventDefault();
-        send();
+        void send();
         break;
       case 'Escape':
         e.preventDefault();
@@ -69,28 +86,18 @@ export const DeviceMultiSelect: React.FC<Props> = ({ devices, filePath, onClose 
       onClick={e => e.stopPropagation()}
       style={{
         backgroundColor: 'var(--surface)',
-        border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
-        borderTop: '1px solid var(--border)',
         borderRadius: '0 0 8px 8px',
         padding: '8px 0',
         outline: 'none',
       }}
     >
-      <div
-        style={{
-          padding: '4px 16px 8px',
-          fontSize: '12px',
-          textTransform: 'uppercase',
-          letterSpacing: '0.06em',
-          color: 'var(--muted)',
-        }}
-      >
+      <div className="section-heading" style={{ padding: '4px 16px 0' }}>
         Send to devices
       </div>
 
       {devices.length === 0 ? (
         <p style={{ padding: '8px 16px', fontSize: '12px', color: 'var(--muted)' }}>
-          No paired devices available. Pair a device in Settings.
+          No paired devices yet. Pair one in Settings under Add Device.
         </p>
       ) : (
         devices.map((device, index) => {
@@ -105,9 +112,7 @@ export const DeviceMultiSelect: React.FC<Props> = ({ devices, filePath, onClose 
               style={{
                 padding: '8px 16px',
                 cursor: device.online ? 'pointer' : 'default',
-                backgroundColor: focused
-                  ? 'color-mix(in srgb, var(--accent) 10%, transparent)'
-                  : 'transparent',
+                backgroundColor: focused ? 'var(--surface-hover)' : 'transparent',
               }}
             >
               <span
@@ -130,54 +135,30 @@ export const DeviceMultiSelect: React.FC<Props> = ({ devices, filePath, onClose 
               >
                 {device.device_name}
               </span>
-              <span
-                aria-label={device.online ? 'Online' : 'Offline'}
-                style={{
-                  width: '7px',
-                  height: '7px',
-                  flexShrink: 0,
-                  borderRadius: '50%',
-                  backgroundColor: device.online ? 'var(--accent)' : 'var(--border)',
-                }}
-              />
+              {!device.online && (
+                <span style={{ flexShrink: 0, fontSize: '12px', color: 'var(--muted)' }}>Offline</span>
+              )}
             </div>
           );
         })
       )}
 
+      {sendError && (
+        <p role="alert" className="error-text" style={{ padding: '4px 16px' }}>
+          {sendError}
+        </p>
+      )}
+
       <div className="flex items-center gap-2" style={{ padding: '8px 16px 4px' }}>
         <button
           type="button"
-          onClick={send}
-          disabled={selected.size === 0}
-          style={{
-            borderRadius: '4px',
-            padding: '4px 12px',
-            fontSize: '12px',
-            border: 'none',
-            cursor: selected.size === 0 ? 'default' : 'pointer',
-            backgroundColor:
-              selected.size === 0
-                ? 'color-mix(in srgb, var(--accent) 30%, transparent)'
-                : 'var(--accent)',
-            color: selected.size === 0 ? 'var(--muted)' : 'var(--on-accent)',
-          }}
+          onClick={() => void send()}
+          disabled={selected.size === 0 || sending}
+          className="btn btn-primary"
         >
-          Send
+          {sending ? 'Sending...' : 'Send'}
         </button>
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            borderRadius: '4px',
-            padding: '4px 12px',
-            fontSize: '12px',
-            background: 'transparent',
-            color: 'var(--muted)',
-            border: '1px solid var(--border)',
-            cursor: 'pointer',
-          }}
-        >
+        <button type="button" onClick={onClose} className="btn btn-ghost">
           Cancel
         </button>
       </div>

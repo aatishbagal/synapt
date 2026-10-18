@@ -16,7 +16,7 @@ export function CoreUpdateNotice({ status, checking, error }: CoreUpdateNoticePr
       </p>
       {warning && <p role="alert" className="text-xs" style={{ color: 'var(--danger)' }}>{warning}</p>}
       {status?.update_available && (
-        <p role="alert" className="text-xs" style={{ color: 'var(--danger)' }}>
+        <p role="status" className="text-xs" style={{ color: 'var(--text)' }}>
           SynaptCore {status.latest_version} is available. This app includes an older core.
           {status.latest_app_compatible === false ? ' The new core requires a compatible app release.' : ''}
         </p>

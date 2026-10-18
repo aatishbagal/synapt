@@ -4,20 +4,30 @@ import { FADE_IN } from '../animations';
 import { listen } from '@tauri-apps/api/event';
 import { IndexPhase, IndexProgress } from '../types';
 import { UnderlineLoader } from './UnderlineLoader';
+import { plainError } from '../utils/errors';
 
-/** Human-readable label for the current indexing phase. */
-function phaseLabel(phase: IndexPhase, filesScanned: number): string {
+/** 6px filled circle separating the phase from its detail. */
+const Separator: React.FC = () => (
+  <div
+    aria-hidden
+    className="shrink-0"
+    style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: 'var(--muted)' }}
+  />
+);
+
+/** Human-readable label for the current indexing phase, plus an optional detail. */
+function phaseLabel(phase: IndexPhase, filesScanned: number): { label: string; detail?: string } {
   switch (phase.type) {
     case 'Starting':
-      return 'Preparing index...';
+      return { label: 'Preparing index...' };
     case 'Scanning':
-      return `Scanning - ${filesScanned.toLocaleString()} files`;
+      return { label: 'Scanning', detail: `${filesScanned.toLocaleString()} files` };
     case 'BuildingIndex':
-      return 'Building search index...';
+      return { label: 'Building search index...' };
     case 'Complete':
-      return `Index complete - ${phase.total_files.toLocaleString()} files`;
+      return { label: 'Index complete', detail: `${phase.total_files.toLocaleString()} files` };
     case 'Failed':
-      return `Index failed: ${phase.reason}`;
+      return { label: 'Index failed', detail: plainError(phase.reason, 'Rescan from Settings to try again.') };
   }
 }
 
@@ -49,11 +59,9 @@ function fillPercent(progress: IndexProgress): number {
 function rightText(progress: IndexProgress): string {
   const { phase } = progress;
   if (phase.type === 'Scanning' && progress.total_dirs > 0) {
-    return `${progress.dirs_done} / ${progress.total_dirs} dirs`;
+    return `${progress.dirs_done} / ${progress.total_dirs} folders`;
   }
-  if (phase.type === 'Scanning') {
-    return `${progress.files_scanned.toLocaleString()} files`;
-  }
+  // Without a directory total the file count is already in the label.
   return '';
 }
 
@@ -86,6 +94,8 @@ export const IndexingBanner: React.FC = () => {
     };
   }, []);
 
+  const { label, detail } = progress ? phaseLabel(progress.phase, progress.files_scanned) : { label: '', detail: undefined };
+
   return (
     <AnimatePresence>
       {visible && progress && (
@@ -102,7 +112,7 @@ export const IndexingBanner: React.FC = () => {
             right: 0,
             background: 'var(--surface)',
             borderTop: '1px solid var(--border)',
-            padding: '6px 16px',
+            padding: '8px 16px',
           }}
         >
           <div
@@ -120,16 +130,22 @@ export const IndexingBanner: React.FC = () => {
                 height: '100%',
                 width: `${fillPercent(progress)}%`,
                 background: 'var(--accent)',
-                transition: 'width 300ms ease-out',
+                transition: 'width var(--duration-medium) var(--ease-standard)',
               }}
             />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
             <UnderlineLoader state={loaderState(progress.phase)} width={20} />
-            <span style={{ flex: 1, color: 'var(--text)', fontSize: 12, fontWeight: 500 }}>
-              {phaseLabel(progress.phase, progress.files_scanned)}
+            <span className="flex flex-1 items-center gap-2 min-w-0">
+              <span style={{ color: 'var(--text)' }}>{label}</span>
+              {detail && (
+                <>
+                  <Separator />
+                  <span className="truncate" style={{ color: 'var(--muted)' }}>{detail}</span>
+                </>
+              )}
             </span>
-            <span style={{ color: 'var(--muted)', fontSize: 11 }}>{rightText(progress)}</span>
+            <span style={{ color: 'var(--muted)' }}>{rightText(progress)}</span>
           </div>
         </motion.div>
       )}

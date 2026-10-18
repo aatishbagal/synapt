@@ -48,7 +48,7 @@ export function Select({ value, options, onChange, disabled }: SelectProps) {
           border: '1px solid var(--border)',
           borderRadius: 4,
           color: 'var(--text)',
-          padding: '6px 12px',
+          padding: '8px 12px',
           fontSize: 13,
           textAlign: 'left',
           cursor: disabled ? 'not-allowed' : 'pointer',
@@ -56,7 +56,7 @@ export function Select({ value, options, onChange, disabled }: SelectProps) {
           justifyContent: 'space-between',
           alignItems: 'center',
           gap: 8,
-          opacity: disabled ? 0.5 : 1,
+          opacity: disabled ? 0.4 : 1,
         }}
       >
         <span>{selectedLabel}</span>
@@ -83,7 +83,6 @@ export function Select({ value, options, onChange, disabled }: SelectProps) {
             borderRadius: 6,
             zIndex: 1000,
             overflow: 'hidden',
-            boxShadow: 'var(--shadow-popup)',
           }}
         >
           {options.map(opt => (
@@ -97,8 +96,8 @@ export function Select({ value, options, onChange, disabled }: SelectProps) {
               style={{
                 width: '100%',
                 padding: '8px 12px',
-                background: opt.value === value ? 'var(--accent)' : 'transparent',
-                color: opt.value === value ? 'var(--on-accent)' : 'var(--text)',
+                background: opt.value === value ? 'var(--surface-hover)' : 'transparent',
+                color: opt.value === value ? 'var(--accent)' : 'var(--text)',
                 border: 'none',
                 textAlign: 'left',
                 fontSize: 13,
@@ -106,7 +105,7 @@ export function Select({ value, options, onChange, disabled }: SelectProps) {
                 display: 'block',
               }}
               onMouseEnter={e => {
-                if (opt.value !== value) e.currentTarget.style.background = 'var(--border)';
+                if (opt.value !== value) e.currentTarget.style.background = 'var(--surface-hover)';
               }}
               onMouseLeave={e => {
                 if (opt.value !== value) e.currentTarget.style.background = 'transparent';
