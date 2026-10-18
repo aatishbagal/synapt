@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
-synapt-core = { path = "../../synapt-core", version = "=0.2.1", features = ["updates"] }
+synapt-core = { path = "../../synapt-core", version = "^0.2.2", features = ["updates"] }
 tokio = { version = "1", features = ["full"] }
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "migrate"] }
 serde = { version = "1", features = ["derive"] }
@@ -47,7 +47,7 @@ reqwest = { version = "0.12", default-features = false }
 tauri-plugin-updater = "2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-synapt-core = { path = "../../synapt-core", version = "=0.2.1", features = ["updates", "portal-hotkey"] }
+synapt-core = { path = "../../synapt-core", version = "^0.2.2", features = ["updates", "portal-hotkey"] }
 gtk = "0.18"
 
 [target.'cfg(target_os = "macos")'.dependencies]
