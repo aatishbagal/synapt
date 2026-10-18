@@ -156,3 +156,54 @@ jobs:
           releaseBody: Built from main. Download the installer for your platform below.
           releaseDraft: false
           prerelease: false
+
+  # Runs once every platform build has published. Release notes belong in the
+  # release PR (the app bundles whatsnew.json at build time, and a Rust test fails
+  # if the newest entry does not match the crate version), so this job is a
+  # backstop: it only adds a whatsnew.json entry or CHANGELOG.md block when the
+  # version is missing, and commits nothing otherwise.
+  #
+  # The push uses GITHUB_TOKEN, which does not trigger another workflow run. If
+  # main gets branch protection, allow github-actions[bot] to push or this step fails.
+  docs:
+    needs: [check, release]
+    if: needs.check.outputs.exists == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Backfill whatsnew.json and CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          gh release view "v$VERSION" -R "${{ github.repository }}" --json body -q .body \
+            > "$RUNNER_TEMP/release-body.md" || : > "$RUNNER_TEMP/release-body.md"
+          DATE=$(gh release view "v$VERSION" -R "${{ github.repository }}" --json publishedAt -q '.publishedAt[0:10]' \
+            2>/dev/null || date -u +%Y-%m-%d)
+          python3 scripts/update_release_docs.py "$VERSION" "$DATE" "$RUNNER_TEMP/release-body.md" \
+            --repo "${{ github.repository }}"
+
+      - name: Commit updated docs to main
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add whatsnew.json CHANGELOG.md
+          if git diff --staged --quiet; then
+            echo "whatsnew.json and CHANGELOG.md already cover v$VERSION - nothing to commit."
+            exit 0
+          fi
+          git commit -m "docs: update whatsnew.json and CHANGELOG.md for v$VERSION"
+          git push origin HEAD:main
+
+      - name: Landing page reminder
+        run: echo "The synapt-landing What's new section reads whatsnew.json from main, so no landing change is needed."

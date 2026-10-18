@@ -989,6 +989,96 @@ pub fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// Settings key holding the last version whose What's New the user has seen.
+const LAST_SEEN_VERSION_KEY: &str = "last_seen_version";
+
+/// One release entry from the bundled whatsnew.json.
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct VersionEntry {
+    /// Version number without the leading "v".
+    pub version: String,
+    /// Release date as YYYY-MM-DD, or None for versions that were never published.
+    pub date: Option<String>,
+    /// One-sentence summary of the release.
+    pub headline: String,
+    /// Up to three user-facing highlights, most important first.
+    pub highlights: Vec<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct WhatsNewFile {
+    versions: Vec<VersionEntry>,
+}
+
+/// Parse whatsnew.json into its version list, newest first.
+fn parse_whats_new(raw: &str) -> Result<Vec<VersionEntry>, String> {
+    serde_json::from_str::<WhatsNewFile>(raw)
+        .map(|file| file.versions)
+        .map_err(|e| format!("invalid whatsnew.json: {e}"))
+}
+
+/// Read the release history bundled with the app, newest first.
+///
+/// Returns every version; the frontend decides which entries are unseen.
+#[tauri::command]
+pub async fn get_whats_new(app: tauri::AppHandle) -> Result<Vec<VersionEntry>, String> {
+    use tauri::Manager;
+    let path = app
+        .path()
+        .resource_dir()
+        .map_err(|e| e.to_string())?
+        .join("whatsnew.json");
+    let raw = tokio::fs::read_to_string(&path)
+        .await
+        .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
+    parse_whats_new(&raw)
+}
+
+/// Get the last version whose What's New the user has seen, if any.
+#[tauri::command]
+pub async fn get_last_seen_version(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Option<String>, String> {
+    state
+        .db
+        .get_setting(LAST_SEEN_VERSION_KEY)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Record that the user has seen What's New for `version`.
+#[tauri::command]
+pub async fn set_last_seen_version(
+    version: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<(), String> {
+    state
+        .db
+        .set_setting(LAST_SEEN_VERSION_KEY, &version)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod whats_new_tests {
+    use super::parse_whats_new;
+
+    #[test]
+    fn bundled_whatsnew_json_is_valid() {
+        let versions = parse_whats_new(include_str!("../../whatsnew.json")).unwrap();
+        assert!(!versions.is_empty());
+        assert_eq!(versions[0].version, env!("CARGO_PKG_VERSION"));
+        for v in &versions {
+            assert!(v.highlights.len() <= 3, "{} has more than 3 highlights", v.version);
+        }
+    }
+
+    #[test]
+    fn rejects_missing_versions_field() {
+        assert!(parse_whats_new("{}").is_err());
+    }
+}
+
 // Keep startup results available when Settings opens after the event was emitted.
 static CORE_UPDATE_STATUS: std::sync::Mutex<Option<synapt_core::updates::CoreUpdateStatus>> =
     std::sync::Mutex::new(None);

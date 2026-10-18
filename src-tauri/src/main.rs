@@ -412,6 +412,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::check_for_update,
             commands::install_update,
             commands::get_app_version,
+            commands::get_whats_new,
+            commands::get_last_seen_version,
+            commands::set_last_seen_version,
         ])
         .build(tauri::generate_context!())?
         .run(|_app, event| {
