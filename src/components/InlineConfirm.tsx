@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
+import { INLINE_CONFIRM } from '../animations';
 
 interface Props {
   message: string;
@@ -15,11 +17,16 @@ export const InlineConfirm: React.FC<Props> = ({
   onCancel,
 }) => {
   const [focused, setFocused] = useState<'confirm' | 'cancel'>('confirm');
+  // Height is not a transform, so MotionConfig's reduced-motion setting does
+  // not cover it; fall back to a plain fade.
+  const reduceMotion = useReducedMotion();
   const confirmRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
+  // preventScroll: focusing inside the clipped, still-growing box would
+  // otherwise scroll its content and make it jump while it expands.
   useEffect(() => {
-    (focused === 'confirm' ? confirmRef : cancelRef).current?.focus();
+    (focused === 'confirm' ? confirmRef : cancelRef).current?.focus({ preventScroll: true });
   }, [focused]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -47,7 +54,11 @@ export const InlineConfirm: React.FC<Props> = ({
   };
 
   return (
-    <div
+    <motion.div
+      initial={reduceMotion ? { opacity: 0 } : INLINE_CONFIRM.initial}
+      animate={reduceMotion ? { opacity: 1 } : INLINE_CONFIRM.animate}
+      exit={reduceMotion ? { opacity: 0 } : INLINE_CONFIRM.exit}
+      transition={INLINE_CONFIRM.transition}
       onKeyDown={handleKeyDown}
       onClick={e => e.stopPropagation()}
       style={{
@@ -59,38 +70,41 @@ export const InlineConfirm: React.FC<Props> = ({
         backgroundColor: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: '6px',
-        padding: '8px 12px',
+        overflow: 'hidden',
       }}
     >
-      <p style={{ color: 'var(--text)', fontSize: '13px' }}>{message}</p>
-      <div className="flex items-center gap-2" style={{ marginTop: '8px' }}>
-        <button
-          ref={confirmRef}
-          type="button"
-          onClick={onConfirm}
-          style={{
-            ...buttonBase,
-            backgroundColor: 'var(--accent)',
-            color: 'var(--on-accent)',
-            border: '1px solid var(--accent)',
-          }}
-        >
-          {confirmLabel}
-        </button>
-        <button
-          ref={cancelRef}
-          type="button"
-          onClick={onCancel}
-          style={{
-            ...buttonBase,
-            backgroundColor: 'transparent',
-            color: 'var(--muted)',
-            border: '1px solid var(--border)',
-          }}
-        >
-          Cancel
-        </button>
+      {/* Padding lives on an inner box so the outer one can animate to height 0. */}
+      <div style={{ padding: '8px 12px' }}>
+        <p style={{ color: 'var(--text)', fontSize: '13px' }}>{message}</p>
+        <div className="flex items-center gap-2" style={{ marginTop: '8px' }}>
+          <button
+            ref={confirmRef}
+            type="button"
+            onClick={onConfirm}
+            style={{
+              ...buttonBase,
+              backgroundColor: 'var(--accent)',
+              color: 'var(--on-accent)',
+              border: '1px solid var(--accent)',
+            }}
+          >
+            {confirmLabel}
+          </button>
+          <button
+            ref={cancelRef}
+            type="button"
+            onClick={onCancel}
+            style={{
+              ...buttonBase,
+              backgroundColor: 'transparent',
+              color: 'var(--muted)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            Cancel
+          </button>
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 };

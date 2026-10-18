@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { FADE_IN } from '../animations';
 import { X } from 'lucide-react';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 
@@ -114,8 +116,6 @@ export const TransferCard: React.FC = () => {
     return () => clearTimeout(t);
   }, [entries]);
 
-  if (entries.size === 0) return null;
-
   const list = [...entries.values()];
   const totalBytes = list.reduce((sum, e) => sum + e.total, 0);
   const receivedBytes = list.reduce((sum, e) => sum + e.bytes_received, 0);
@@ -149,56 +149,65 @@ export const TransferCard: React.FC = () => {
   };
 
   return (
-    <div
-      className="shrink-0"
-      onMouseEnter={() => {
-        interactedRef.current = true;
-      }}
-      style={{
-        backgroundColor: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: '8px',
-        padding: '10px 14px',
-        margin: '4px',
-      }}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span
-          className="truncate"
-          style={{ color: 'var(--text)', fontSize: '13px', minWidth: 0 }}
-        >
-          {headerText}
-        </span>
-        <button
-          type="button"
-          aria-label="Dismiss transfers"
-          onClick={dismiss}
-          className="flex items-center justify-center shrink-0"
-          style={{ border: 'none', background: 'transparent', color: 'var(--muted)', cursor: 'pointer' }}
-        >
-          <X size={16} />
-        </button>
-      </div>
-      <div
-        style={{
-          width: '100%',
-          height: '3px',
-          backgroundColor: 'var(--border)',
-          borderRadius: '2px',
-          overflow: 'hidden',
-          marginTop: '8px',
-        }}
-      >
-        <div
-          style={{
-            height: '100%',
-            width: `${pct}%`,
-            backgroundColor: fillColor,
-            transition: 'width 200ms ease-out',
+    <AnimatePresence>
+      {entries.size > 0 && (
+        <motion.div
+          key="transfer-card"
+          initial={{ ...FADE_IN.initial, y: 8 }}
+          animate={{ ...FADE_IN.animate, y: 0 }}
+          exit={{ opacity: 0, y: 8 }}
+          transition={FADE_IN.transition}
+          className="shrink-0"
+          onMouseEnter={() => {
+            interactedRef.current = true;
           }}
-        />
-      </div>
-      <p style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '6px' }}>{statusText}</p>
-    </div>
+          style={{
+            backgroundColor: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            padding: '10px 14px',
+            margin: '4px',
+          }}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span
+              className="truncate"
+              style={{ color: 'var(--text)', fontSize: '13px', minWidth: 0 }}
+            >
+              {headerText}
+            </span>
+            <button
+              type="button"
+              aria-label="Dismiss transfers"
+              onClick={dismiss}
+              className="flex items-center justify-center shrink-0"
+              style={{ border: 'none', background: 'transparent', color: 'var(--muted)', cursor: 'pointer' }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <div
+            style={{
+              width: '100%',
+              height: '3px',
+              backgroundColor: 'var(--border)',
+              borderRadius: '2px',
+              overflow: 'hidden',
+              marginTop: '8px',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${pct}%`,
+                backgroundColor: fillColor,
+                transition: 'width 200ms ease-out',
+              }}
+            />
+          </div>
+          <p style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '6px' }}>{statusText}</p>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

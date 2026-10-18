@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Settings as SettingsIcon } from 'lucide-react';
+import { motion } from 'motion/react';
 import { PairingDialog } from '../components/PairingDialog';
 import { SearchBar } from '../components/SearchBar';
 import { ResultList } from '../components/ResultList';
@@ -12,6 +13,8 @@ import { TransferCard } from '../components/TransferCard';
 import { IndexingBanner } from '../components/IndexingBanner';
 import { Peer, SearchResult, TrustedPeer, DeviceOption, IndexProgress, IpcStatus } from '../types';
 import { useTheme } from '../hooks/useTheme';
+import { useEntranceOnShow } from '../hooks/useEntranceOnShow';
+import { OVERLAY_ENTER } from '../animations';
 import { parseInput } from '../utils/parseInput';
 import { stepDown, stepUp } from '../utils/navigation';
 
@@ -22,6 +25,7 @@ interface IncomingPair {
 }
 
 export const Overlay: React.FC = () => {
+  const entrance = useEntranceOnShow(OVERLAY_ENTER);
   const [incomingPair, setIncomingPair] = useState<IncomingPair | null>(null);
 
   const [inputValue, setInputValue] = useState('');
@@ -387,7 +391,9 @@ export const Overlay: React.FC = () => {
     sendToDevicesPath === null;
 
   return (
-    <div
+    <motion.div
+      initial={OVERLAY_ENTER.initial}
+      animate={entrance}
       tabIndex={0}
       onKeyDown={handleRootKeyDown}
       className="flex flex-col w-screen h-screen overflow-hidden focus:outline-none relative"
@@ -603,6 +609,6 @@ export const Overlay: React.FC = () => {
       )}
 
       <IndexingBanner />
-    </div>
+    </motion.div>
   );
 };

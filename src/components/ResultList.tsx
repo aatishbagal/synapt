@@ -1,8 +1,10 @@
 import React, { useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { AppIcon } from './AppIcon';
 import { InlineConfirm } from './InlineConfirm';
 import { DeviceMultiSelect } from './DeviceMultiSelect';
 import { SearchResult, DeviceOption } from '../types';
+import { RESULT_ITEM } from '../animations';
 
 interface Props {
   results: SearchResult[];
@@ -25,6 +27,10 @@ interface Props {
 }
 
 const FILE_ACTIONS = ['Open', 'Reveal in file manager', 'Send to devices'];
+
+// Only the first rows stagger in; later rows start at once so a long list
+// never makes the user wait for the entrance to finish.
+const STAGGER_CAP = 6;
 
 function isRemote(source: SearchResult['source']): source is { Remote: { device_name: string } } {
   return typeof source === 'object' && 'Remote' in source;
@@ -90,128 +96,139 @@ export const ResultList: React.FC<Props> = ({
     selectedRowRef.current?.scrollIntoView({ block: 'nearest' });
   }, [selectedIndex]);
 
+  // popLayout pops removed rows out of flow, so the wrapper must be positioned.
   return (
-    <div>
-      {results.map((result, index) => {
-        const selected = index === selectedIndex;
-        const isApp = result.result_type === 'App';
-        const remote = isRemote(result.source);
-        const confirming = confirmingPath != null && result.path === confirmingPath;
-        const expanded = expandedPath != null && result.path === expandedPath;
-        const sending = sendToDevicesPath != null && result.path === sendToDevicesPath;
-        return (
-          <React.Fragment key={`${result.path}-${index}`}>
-            <div
-              ref={selected ? selectedRowRef : undefined}
-              onClick={() => onSelect(result)}
-              onMouseEnter={() => onHover(index)}
-              className="flex items-center justify-between gap-2 px-3 py-2.5 cursor-pointer transition-colors"
-              style={{
-                position: 'relative',
-                borderBottom: '1px solid var(--border)',
-                backgroundColor: selected ? 'var(--surface-hover)' : 'transparent',
-              }}
+    <div style={{ position: 'relative' }}>
+      <AnimatePresence mode="popLayout">
+        {results.map((result, index) => {
+          const selected = index === selectedIndex;
+          const isApp = result.result_type === 'App';
+          const remote = isRemote(result.source);
+          const confirming = confirmingPath != null && result.path === confirmingPath;
+          const expanded = expandedPath != null && result.path === expandedPath;
+          const sending = sendToDevicesPath != null && result.path === sendToDevicesPath;
+          // Keyed by identity rather than position so a row that survives a
+          // query change keeps its place instead of re-running the entrance.
+          return (
+            <motion.div
+              key={`${sourceLabel(result.source)}:${result.path}`}
+              {...RESULT_ITEM(index < STAGGER_CAP ? index : 0)}
             >
-              {confirming && (
-                <InlineConfirm
-                  message={confirmMessage ?? ''}
-                  confirmLabel={confirmLabel}
-                  onConfirm={() => onConfirmTransfer?.()}
-                  onCancel={() => onCancelTransfer?.()}
-                />
-              )}
-              <div className="flex items-center flex-1 min-w-0" style={{ gap: '10px' }}>
-                {isApp ? (
-                  <AppIcon iconPath={result.icon_path} size={20} />
-                ) : (
-                  <span
-                    className="flex items-center justify-center shrink-0"
-                    style={{ width: 20, height: 20 }}
-                  >
-                    {resultsAreFolders ? <FolderIcon /> : <FileIcon />}
-                  </span>
-                )}
-                <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                  <span
-                    className="truncate text-[13px]"
-                    style={{ color: 'var(--text)', fontWeight: isApp ? 500 : 400 }}
-                  >
-                    {result.name}
-                  </span>
-                  <span className="truncate text-xs" style={{ color: 'var(--muted)' }}>
-                    {isApp ? 'Application' : result.path}
-                  </span>
-                </div>
-              </div>
-              {!isApp && (
-                <span
-                  className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
-                  style={
-                    remote
-                      ? {
-                          backgroundColor: 'var(--surface-hover)',
-                          color: 'var(--accent)',
-                          border: '1px solid var(--accent)',
-                        }
-                      : {
-                          backgroundColor: 'var(--surface-hover)',
-                          color: 'var(--muted)',
-                          border: '1px solid var(--border)',
-                        }
-                  }
-                >
-                  {sourceLabel(result.source)}
-                </span>
-              )}
-            </div>
-
-            {expanded && !sending && (
               <div
+                ref={selected ? selectedRowRef : undefined}
+                onClick={() => onSelect(result)}
+                onMouseEnter={() => onHover(index)}
+                className="flex items-center justify-between gap-2 px-3 py-2.5 cursor-pointer transition-colors"
                 style={{
-                  backgroundColor: 'var(--surface)',
-                  border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
-                  borderTop: '1px solid var(--border)',
-                  borderRadius: '0 0 8px 8px',
-                  padding: '4px 0',
+                  position: 'relative',
+                  borderBottom: '1px solid var(--border)',
+                  backgroundColor: selected ? 'var(--surface-hover)' : 'transparent',
                 }}
               >
-                {FILE_ACTIONS.map((label, actionIndex) => {
-                  const actionSelected = actionIndex === expandedActionIndex;
-                  return (
-                    <div
-                      key={label}
-                      onMouseEnter={() => onActionHover?.(actionIndex)}
-                      onClick={e => {
-                        e.stopPropagation();
-                        onActionExecute?.(result.path, actionIndex);
-                      }}
-                      className="cursor-pointer transition-colors"
-                      style={{
-                        padding: '8px 16px 8px 36px',
-                        fontSize: '13px',
-                        color: actionSelected ? 'var(--accent)' : 'var(--text)',
-                        backgroundColor: actionSelected
-                          ? 'color-mix(in srgb, var(--accent) 10%, transparent)'
-                          : 'transparent',
-                      }}
+                <AnimatePresence>
+                  {confirming && (
+                    <InlineConfirm
+                      key="confirm"
+                      message={confirmMessage ?? ''}
+                      confirmLabel={confirmLabel}
+                      onConfirm={() => onConfirmTransfer?.()}
+                      onCancel={() => onCancelTransfer?.()}
+                    />
+                  )}
+                </AnimatePresence>
+                <div className="flex items-center flex-1 min-w-0" style={{ gap: '10px' }}>
+                  {isApp ? (
+                    <AppIcon iconPath={result.icon_path} size={20} />
+                  ) : (
+                    <span
+                      className="flex items-center justify-center shrink-0"
+                      style={{ width: 20, height: 20 }}
                     >
-                      {label}
-                    </div>
-                  );
-                })}
+                      {resultsAreFolders ? <FolderIcon /> : <FileIcon />}
+                    </span>
+                  )}
+                  <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                    <span
+                      className="truncate text-[13px]"
+                      style={{ color: 'var(--text)', fontWeight: isApp ? 500 : 400 }}
+                    >
+                      {result.name}
+                    </span>
+                    <span className="truncate text-xs" style={{ color: 'var(--muted)' }}>
+                      {isApp ? 'Application' : result.path}
+                    </span>
+                  </div>
+                </div>
+                {!isApp && (
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
+                    style={
+                      remote
+                        ? {
+                            backgroundColor: 'var(--surface-hover)',
+                            color: 'var(--accent)',
+                            border: '1px solid var(--accent)',
+                          }
+                        : {
+                            backgroundColor: 'var(--surface-hover)',
+                            color: 'var(--muted)',
+                            border: '1px solid var(--border)',
+                          }
+                    }
+                  >
+                    {sourceLabel(result.source)}
+                  </span>
+                )}
               </div>
-            )}
 
-            {sending && (
-              <DeviceMultiSelect
-                devices={devices}
-                filePath={result.path}
-                onClose={() => onCloseSendToDevices?.()}
-              />
-            )}
-          </React.Fragment>
-        );
-      })}
+              {expanded && !sending && (
+                <div
+                  style={{
+                    backgroundColor: 'var(--surface)',
+                    border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
+                    borderTop: '1px solid var(--border)',
+                    borderRadius: '0 0 8px 8px',
+                    padding: '4px 0',
+                  }}
+                >
+                  {FILE_ACTIONS.map((label, actionIndex) => {
+                    const actionSelected = actionIndex === expandedActionIndex;
+                    return (
+                      <div
+                        key={label}
+                        onMouseEnter={() => onActionHover?.(actionIndex)}
+                        onClick={e => {
+                          e.stopPropagation();
+                          onActionExecute?.(result.path, actionIndex);
+                        }}
+                        className="cursor-pointer transition-colors"
+                        style={{
+                          padding: '8px 16px 8px 36px',
+                          fontSize: '13px',
+                          color: actionSelected ? 'var(--accent)' : 'var(--text)',
+                          backgroundColor: actionSelected
+                            ? 'color-mix(in srgb, var(--accent) 10%, transparent)'
+                            : 'transparent',
+                        }}
+                      >
+                        {label}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {sending && (
+                <DeviceMultiSelect
+                  devices={devices}
+                  filePath={result.path}
+                  onClose={() => onCloseSendToDevices?.()}
+                />
+              )}
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
     </div>
   );
 };

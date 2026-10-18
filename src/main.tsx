@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { HashRouter, Routes, Route } from 'react-router-dom';
+import { MotionConfig } from 'motion/react';
 import { Overlay } from './pages/Overlay';
 import { Settings } from './pages/Settings';
 import { TransferHistory } from './pages/TransferHistory';
@@ -19,14 +20,18 @@ const Root: React.FC = () => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // reducedMotion="user" drops transform and layout animation when the OS asks
+  // for reduced motion, leaving only opacity fades.
   return (
-    <HashRouter>
-      <Routes>
-        <Route path="/" element={<Overlay />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/transfers" element={<TransferHistory />} />
-      </Routes>
-    </HashRouter>
+    <MotionConfig reducedMotion="user">
+      <HashRouter>
+        <Routes>
+          <Route path="/" element={<Overlay />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/transfers" element={<TransferHistory />} />
+        </Routes>
+      </HashRouter>
+    </MotionConfig>
   );
 };
 

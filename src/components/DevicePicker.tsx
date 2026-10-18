@@ -1,4 +1,6 @@
 import React from 'react';
+import { motion } from 'motion/react';
+import { SPRING_GENTLE } from '../animations';
 import { DeviceOption } from '../types';
 
 interface Props {
@@ -12,9 +14,13 @@ interface Props {
 /** Dropdown listing trusted devices, opened by typing @ in the search bar. */
 export const DevicePicker: React.FC<Props> = ({ devices, selectedIndex, onSelect }) => {
   return (
-    <div
+    <motion.div
       role="listbox"
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={SPRING_GENTLE}
       style={{
+        transformOrigin: 'top center',
         position: 'absolute',
         top: '100%',
         left: 0,
@@ -95,6 +101,6 @@ export const DevicePicker: React.FC<Props> = ({ devices, selectedIndex, onSelect
           );
         })
       )}
-    </div>
+    </motion.div>
   );
 };

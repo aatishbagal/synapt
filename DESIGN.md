@@ -207,9 +207,24 @@ static end frame instead of flickering. Elements marked `data-motion-timer` are 
 because their animation is a functional countdown, not decoration.
 Motion (JS) animations must check reduced motion themselves (`useReducedMotion()`).
 
+Motion presets live in `src/animations.ts` (identical in Synapt and SynaptClip):
+`SPRING`, `SPRING_GENTLE`, `OVERLAY_ENTER`, `PANEL_ENTER`, `RESULT_ITEM(index)`, `FADE_IN`,
+`INLINE_CONFIRM`, `ITEM_EXIT`. Import from there; do not define one-off springs in components.
+
+The window is shown and hidden from Rust, never unmounted, so the root entrance is
+replayed on every window focus by `useEntranceOnShow` (`src/hooks/useEntranceOnShow.ts`)
+through animation controls rather than by re-mounting. App roots are wrapped in
+`<MotionConfig reducedMotion="user">`, which drops transform animation under reduced
+motion; height animation (`INLINE_CONFIRM`) checks `useReducedMotion()` itself.
+
 Currently in use:
 
-- Panel fade-in: `opacity 120ms ease-out` (`.panel-root`)
+- Overlay root: `OVERLAY_ENTER`, replayed on focus
+- Result rows: `RESULT_ITEM`, stagger capped at the first 6 rows, keyed by source and path
+- Inline confirmation: `INLINE_CONFIRM` expand and collapse
+- Device picker: scale 0.95 to 1 with opacity, `SPRING_GENTLE`
+- Search loading bar, transfer card, indexing banner: `FADE_IN` (cards add an 8px rise) with exit fades
+- `.panel-root` fade (`opacity 120ms ease-out`) is defined in CSS but not used by any component
 - Transfer progress width: `200ms ease-out`
 - Indexing progress width: `300ms ease-out`
 - Underline loader: `underline-load 1.2s ease-in-out infinite`
@@ -218,7 +233,6 @@ Currently in use:
 
 Current code differs:
 
-- `motion` is installed but not yet used by any component.
 - No transition uses the specified cubic-bezier; all use `ease-out`, `ease-in-out`, `linear`, or Tailwind's default curve.
 - The two looping loaders run 1.2s. They are indeterminate progress indicators, not transitions; under reduced motion they hold a static segment.
 
