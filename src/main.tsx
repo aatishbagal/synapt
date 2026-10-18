@@ -7,6 +7,8 @@ import { Settings } from './pages/Settings';
 import { TransferHistory } from './pages/TransferHistory';
 import { useTheme } from './hooks/useTheme';
 import './index.css';
+// Reads experimental_ui once at startup and applies data-experimental-ui.
+import './experimental';
 
 // Apply the theme before first render to avoid a flash. invoke() is async, so
 // we read the last-known value from localStorage synchronously here; the real

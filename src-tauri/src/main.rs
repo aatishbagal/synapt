@@ -373,6 +373,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::remove_shared_dir,
             commands::get_setting,
             commands::set_setting,
+            commands::restart_app,
             commands::get_all_settings,
             commands::get_indexed_dir_stats,
             commands::set_device_name,

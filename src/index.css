@@ -422,6 +422,19 @@ body {
   }
 }
 
+/* Experimental UI scope. Overrides for the UI in development live here so they
+   only apply when the experimental_ui setting was on at launch. For now: tighter
+   list rows as a visible proof of concept. */
+[data-experimental-ui="true"] {
+  --spacing-base: 6px;
+}
+
+[data-experimental-ui="true"] .list-row {
+  min-height: 40px;
+  padding-top: var(--spacing-base);
+  padding-bottom: var(--spacing-base);
+}
+
 /* Reduced motion: collapse every animation and transition to a single instant
    frame. Infinite loaders would otherwise flicker at 0.01ms per cycle, so they
    run once and hold a static end frame (redefined below) that still reads as

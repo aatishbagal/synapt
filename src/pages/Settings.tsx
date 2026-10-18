@@ -12,6 +12,7 @@ import { useHotkeyInfo } from '../hooks/useHotkeyInfo';
 import { Select } from '../components/Select';
 import { UnderlineLoader } from '../components/UnderlineLoader';
 import { InlineConfirm } from '../components/InlineConfirm';
+import { ExperimentalSettings } from '../components/ExperimentalSettings';
 import { AnimatePresence } from 'motion/react';
 import { describeError } from '../utils/errors';
 
@@ -1085,6 +1086,13 @@ export const Settings: React.FC = () => {
                 </div>
               )}
             </div>
+          </div>
+        </Section>
+
+        {/* 10. Experimental */}
+        <Section title="Experimental">
+          <div className="px-3 py-2" style={itemCard}>
+            <ExperimentalSettings />
           </div>
         </Section>
       </div>

@@ -1172,6 +1172,17 @@ pub async fn check_for_update(app: tauri::AppHandle) -> Result<Option<UpdateInfo
     }))
 }
 
+/// Relaunch the app so a setting that is only read at startup (experimental_ui)
+/// takes effect. request_restart goes through the event loop, so RunEvent::Exit
+/// and plugin cleanup run before the new process starts, and the command can
+/// return instead of parking a runtime thread the way restart() does off the
+/// main thread. The restart exit code is not blocked by the ExitRequested guard.
+#[tauri::command]
+pub fn restart_app(app: tauri::AppHandle) {
+    tracing::info!("restart requested from Settings");
+    app.request_restart();
+}
+
 /// Download and install the available update, then restart into it.
 ///
 /// Re-checks rather than taking a handle from [`check_for_update`], since the

@@ -414,6 +414,19 @@ Implemented by `.input`. The search bar is the full-width `.input` inside a `--b
 
 Implemented by `InlineConfirm` with `tone="danger"` (destructive confirm) or the default tone (accent confirm), and a `.btn-ghost` Cancel.
 
+## Experimental UI
+
+The `experimental_ui` setting (default `false`, seeded by a migration) is read once when a
+webview starts (`src/experimental.ts`) and, when on, sets `data-experimental-ui="true"` on
+`<html>`. Work-in-progress UI goes under the `[data-experimental-ui="true"]` scope in
+`src/index.css`, so it never leaks into the default UI. Today the scope only defines
+`--spacing-base: 6px` and tightens `.list-row` to 40px with 6px vertical padding.
+
+Changing the setting needs a restart. Settings > Experimental offers "Restart now"
+(the `restart_app` command) and "Later" whenever the saved value differs from the one
+Synapt started with; switching back withdraws the offer. The switch is a checkbox, like
+every other boolean setting.
+
 ## What Not To Do
 
 - Do not use accent colour on card borders, section dividers, or status indicators
