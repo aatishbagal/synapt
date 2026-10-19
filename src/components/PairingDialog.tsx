@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Peer, TrustedPeer } from '../types';
+import { describeError } from '../utils/errors';
 
 interface IncomingPair {
   device_id: string;
@@ -27,19 +28,7 @@ const codeStyle: React.CSSProperties = {
   fontFamily: 'monospace',
   fontSize: '32px',
   letterSpacing: '0.2em',
-  color: 'var(--accent)',
-};
-
-const primaryButton: React.CSSProperties = {
-  backgroundColor: 'var(--surface-hover)',
-  color: 'var(--accent)',
-  border: '1px solid var(--accent)',
-};
-
-const secondaryButton: React.CSSProperties = {
-  backgroundColor: 'var(--surface)',
   color: 'var(--text)',
-  border: '1px solid var(--border)',
 };
 
 function formatCode(code: string): string {
@@ -85,7 +74,7 @@ export const PairingDialog: React.FC<Props> = ({
         if (!active) {
           return;
         }
-        setErrorMsg(String(e));
+        setErrorMsg(describeError(e, 'Could not reach the other device. Try pairing again.'));
         setStep('error');
       }
     })();
@@ -113,7 +102,7 @@ export const PairingDialog: React.FC<Props> = ({
       setPairedName(trusted.device_name);
       setStep('success');
     } catch (e) {
-      setErrorMsg(String(e));
+      setErrorMsg(describeError(e, 'Pairing did not complete. Try pairing again.'));
       setStep('error');
     }
   };
@@ -123,7 +112,7 @@ export const PairingDialog: React.FC<Props> = ({
     try {
       await invoke('accept_pair_cmd');
     } catch (e) {
-      setErrorMsg(String(e));
+      setErrorMsg(describeError(e, 'Pairing did not complete. Try pairing again.'));
       setStep('error');
     }
   };
@@ -137,12 +126,31 @@ export const PairingDialog: React.FC<Props> = ({
     onClose();
   };
 
-  const btnClass = 'flex-1 text-xs px-3 py-2 rounded transition-colors';
+  // Escape always backs out: reject an incoming request, otherwise close.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (step === 'prompt' || step === 'waiting') void onReject();
+      else onClose();
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+    // onReject only depends on onClose.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, onClose]);
+
+  const primary = 'btn btn-primary flex-1';
+  const secondary = 'btn btn-secondary flex-1';
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Pair a device"
       className="fixed inset-0 flex items-center justify-center z-50"
-      style={{ backgroundColor: 'rgba(0, 0, 0, 0.6)' }}
+      style={{ backgroundColor: 'var(--backdrop)' }}
     >
       <div
         className="p-6 w-80"
@@ -153,9 +161,12 @@ export const PairingDialog: React.FC<Props> = ({
         }}
       >
         {step === 'connecting' && (
-          <p className="text-sm text-center" style={{ color: 'var(--muted)' }}>
-            Connecting...
-          </p>
+          <div className="flex flex-col gap-4">
+            <p role="status" className="text-sm text-center" style={{ color: 'var(--muted)' }}>
+              Connecting...
+            </p>
+            <button onClick={onClose} className={secondary}>Cancel</button>
+          </div>
         )}
 
         {step === 'verify' && (
@@ -165,8 +176,8 @@ export const PairingDialog: React.FC<Props> = ({
               Compare this code on the other device. If they match, click Confirm.
             </p>
             <div className="flex gap-2">
-              <button onClick={onConfirm} className={btnClass} style={primaryButton}>Confirm</button>
-              <button onClick={onClose} className={btnClass} style={secondaryButton}>Cancel</button>
+              <button onClick={onConfirm} className={primary}>Confirm</button>
+              <button onClick={onClose} className={secondary}>Cancel</button>
             </div>
           </div>
         )}
@@ -181,23 +192,26 @@ export const PairingDialog: React.FC<Props> = ({
               If this code matches the one on the other device, click Accept.
             </p>
             <div className="flex gap-2">
-              <button onClick={onAccept} className={btnClass} style={primaryButton}>Accept</button>
-              <button onClick={onReject} className={btnClass} style={secondaryButton}>Reject</button>
+              <button onClick={onAccept} className={primary}>Accept</button>
+              <button onClick={onReject} className={secondary}>Reject</button>
             </div>
           </div>
         )}
 
         {step === 'waiting' && (
-          <p className="text-sm text-center" style={{ color: 'var(--muted)' }}>
-            Completing pairing...
-          </p>
+          <div className="flex flex-col gap-4">
+            <p role="status" className="text-sm text-center" style={{ color: 'var(--muted)' }}>
+              Waiting for the other device to confirm...
+            </p>
+            <button onClick={onReject} className={secondary}>Cancel pairing</button>
+          </div>
         )}
 
         {step === 'success' && (
           <div className="flex flex-col gap-4">
             <p className="text-sm text-center" style={{ color: 'var(--text)' }}>Device paired.</p>
             <p className="text-xs text-center" style={{ color: 'var(--muted)' }}>{pairedName}</p>
-            <button onClick={onClose} className="text-xs px-3 py-2 rounded transition-colors" style={primaryButton}>Done</button>
+            <button onClick={onClose} className="btn btn-primary">Done</button>
           </div>
         )}
 
@@ -205,7 +219,7 @@ export const PairingDialog: React.FC<Props> = ({
           <div className="flex flex-col gap-4">
             <p className="text-sm text-center" style={{ color: 'var(--text)' }}>Pairing failed.</p>
             <p className="text-xs text-center break-words" style={{ color: 'var(--muted)' }}>{errorMsg}</p>
-            <button onClick={onClose} className="text-xs px-3 py-2 rounded transition-colors" style={secondaryButton}>Close</button>
+            <button onClick={onClose} className="btn btn-secondary">Close</button>
           </div>
         )}
       </div>

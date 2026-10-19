@@ -29,7 +29,7 @@ interface Props {
 }
 
 const MODE_LABELS: Record<InputMode, string> = {
-  local: 'Local',
+  local: 'Files and apps',
   folder: 'Folder',
   remote: 'Remote',
   settings: 'Settings',
@@ -162,83 +162,67 @@ export const SearchBar: React.FC<Props> = ({
     }
   };
 
-  const showBadge = !selectedDevice && !showDevicePicker && parsed.mode !== 'local';
+  // The current input mode is always visible as a plain text label, so the
+  // user never has to remember which prefix they typed. A tagged device
+  // replaces it, since the device chip already says where the search runs.
+  const modeLabel = selectedDevice || showDevicePicker ? null : MODE_LABELS[parsed.mode];
 
+  // Header and search share one --bg surface; the field itself is the
+  // DESIGN.md input (--surface, 1px border, 8px radius, accent border on focus).
   return (
-    <div
-      className="flex items-center gap-2 px-3 shrink-0"
-      style={{
-        height: '48px',
-        backgroundColor: 'var(--surface)',
-        borderBottom: '1px solid var(--border)',
-      }}
-    >
-      <Search size={16} style={{ color: 'var(--muted)' }} className="shrink-0" />
-      {selectedDevice && (
-        <span
-          className="flex items-center gap-1 shrink-0"
-          style={{
-            backgroundColor: 'color-mix(in srgb, var(--accent) 15%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
-            borderRadius: '4px',
-            padding: '3px 8px',
-            fontSize: '12px',
-            color: 'var(--accent)',
-          }}
-        >
-          {selectedDevice.device_name}
-          <button
-            type="button"
-            aria-label="Clear device"
-            onMouseDown={e => {
-              e.preventDefault();
-              onClearDevice(false);
-            }}
-            className="flex items-center justify-center"
+    <div className="px-3 pb-2 shrink-0" style={{ backgroundColor: 'var(--bg)' }}>
+      <label className="input flex items-center gap-2 cursor-text">
+        <Search size={16} style={{ color: 'var(--muted)' }} className="shrink-0" aria-hidden />
+        {selectedDevice && (
+          <span
+            className="flex items-center gap-1 shrink-0 rounded text-xs"
             style={{
-              width: '14px',
-              height: '14px',
-              border: 'none',
-              background: 'transparent',
-              color: 'color-mix(in srgb, var(--accent) 60%, transparent)',
-              cursor: 'pointer',
+              backgroundColor: 'var(--surface-hover)',
+              color: 'var(--text)',
+              padding: '0 4px 0 8px',
             }}
           >
-            <X size={12} />
-          </button>
-        </span>
-      )}
-      {showBadge && (
-        <span
-          className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
-          style={{
-            backgroundColor: 'var(--surface-hover)',
-            color: 'var(--accent)',
-            border: '1px solid var(--accent)',
-          }}
-        >
-          {MODE_LABELS[parsed.mode]}
-        </span>
-      )}
-      <input
-        ref={inputRef}
-        type="text"
-        value={value}
-        onChange={e => onValueChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={
-          selectedDevice
-            ? `Search on ${selectedDevice.device_name}...`
-            : 'Search files, apps, @device, /folder, or calculate...'
-        }
-        className="flex-1 bg-transparent text-sm outline-none"
-        style={{ color: 'var(--text)' }}
-      />
-      {parsed.mode === 'calc' && calcResult !== null && (
-        <span className="text-sm shrink-0" style={{ color: 'var(--accent)' }}>
-          = {calcResult}
-        </span>
-      )}
+            {selectedDevice.device_name}
+            <button
+              type="button"
+              aria-label={`Stop searching ${selectedDevice.device_name}`}
+              title="Search this device instead"
+              onMouseDown={e => {
+                e.preventDefault();
+                onClearDevice(false);
+              }}
+              className="icon-button"
+            >
+              <X size={12} />
+            </button>
+          </span>
+        )}
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={e => onValueChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          aria-label="Search"
+          placeholder={
+            selectedDevice
+              ? `Search on ${selectedDevice.device_name}...`
+              : 'Search files, apps, @device, /folder, or calculate...'
+          }
+          className="flex-1 min-w-0 bg-transparent text-sm outline-none"
+          style={{ color: 'var(--text)' }}
+        />
+        {parsed.mode === 'calc' && calcResult !== null && (
+          <span className="text-sm font-medium shrink-0" style={{ color: 'var(--text)' }}>
+            = {calcResult}
+          </span>
+        )}
+        {modeLabel && (
+          <span className="text-xs shrink-0" style={{ color: 'var(--muted)' }} aria-live="polite">
+            {modeLabel}
+          </span>
+        )}
+      </label>
     </div>
   );
 };

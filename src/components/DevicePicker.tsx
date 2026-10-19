@@ -1,4 +1,6 @@
 import React from 'react';
+import { motion } from 'motion/react';
+import { SPRING_GENTLE } from '../animations';
 import { DeviceOption } from '../types';
 
 interface Props {
@@ -12,9 +14,13 @@ interface Props {
 /** Dropdown listing trusted devices, opened by typing @ in the search bar. */
 export const DevicePicker: React.FC<Props> = ({ devices, selectedIndex, onSelect }) => {
   return (
-    <div
+    <motion.div
       role="listbox"
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={SPRING_GENTLE}
       style={{
+        transformOrigin: 'top center',
         position: 'absolute',
         top: '100%',
         left: 0,
@@ -36,7 +42,7 @@ export const DevicePicker: React.FC<Props> = ({ devices, selectedIndex, onSelect
             padding: '16px',
           }}
         >
-          No paired devices. Pair a device in Settings.
+          No paired devices yet. Pair one in Settings under Add Device.
         </p>
       ) : (
         devices.map((device, index) => {
@@ -51,17 +57,13 @@ export const DevicePicker: React.FC<Props> = ({ devices, selectedIndex, onSelect
                 e.preventDefault();
                 onSelect(device);
               }}
+              data-selected={selected}
+              className="list-row"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                gap: '10px',
-                padding: '10px 14px',
-                cursor: 'pointer',
-                backgroundColor: selected
-                  ? 'color-mix(in srgb, var(--accent) 10%, transparent)'
-                  : 'transparent',
-                borderLeft: selected ? '2px solid var(--accent)' : '2px solid transparent',
+                gap: '12px',
               }}
             >
               <div style={{ minWidth: 0 }}>
@@ -78,23 +80,17 @@ export const DevicePicker: React.FC<Props> = ({ devices, selectedIndex, onSelect
                   {device.device_name}
                 </div>
                 {device.ip && (
-                  <div style={{ color: 'var(--muted)', fontSize: '11px' }}>{device.ip}</div>
+                  <div style={{ color: 'var(--muted)', fontSize: '12px' }}>{device.ip}</div>
                 )}
               </div>
-              <span
-                aria-label={device.online ? 'Online' : 'Offline'}
-                style={{
-                  flexShrink: 0,
-                  width: '7px',
-                  height: '7px',
-                  borderRadius: '50%',
-                  backgroundColor: device.online ? 'var(--accent)' : 'var(--border)',
-                }}
-              />
+              {/* Text label, not a status dot. */}
+              <span style={{ flexShrink: 0, fontSize: '12px', color: device.online ? 'var(--text)' : 'var(--muted)' }}>
+                {device.online ? 'Online' : 'Offline'}
+              </span>
             </div>
           );
         })
       )}
-    </div>
+    </motion.div>
   );
 };

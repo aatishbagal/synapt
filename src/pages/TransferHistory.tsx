@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { ArrowLeft, FolderOpen } from 'lucide-react';
 import { TrustedPeer } from '../types';
+import { EmptyState } from '../components/EmptyState';
+import { describeError } from '../utils/errors';
 
 interface TransferEntry {
   peer_device_id: string;
@@ -45,21 +47,21 @@ function formatBytes(n: number | null): string {
   return `${value.toFixed(1)} ${units[i]}`;
 }
 
-function statusBadgeStyle(status: string): React.CSSProperties {
-  const base: React.CSSProperties = { backgroundColor: 'var(--surface-hover)' };
+/** Plain-language status label; colour backs up the text, never replaces it. */
+function statusLabel(status: string): { text: string; color: string } {
   switch (status.toLowerCase()) {
     case 'complete':
     case 'completed':
-      return { ...base, color: 'var(--success)', border: '1px solid var(--border)' };
+      return { text: 'Completed', color: 'var(--muted)' };
     case 'failed':
-      return { ...base, color: 'var(--danger)', border: '1px solid var(--border)' };
+      return { text: 'Failed', color: 'var(--danger)' };
     case 'partial':
-      return { ...base, color: 'var(--warning)', border: '1px solid var(--border)' };
+      return { text: 'Incomplete', color: 'var(--warning)' };
     case 'in_progress':
     case 'inprogress':
-      return { ...base, color: 'var(--accent)', border: '1px solid var(--accent)' };
+      return { text: 'In progress', color: 'var(--text)' };
     default:
-      return { ...base, color: 'var(--muted)', border: '1px solid var(--border)' };
+      return { text: status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' '), color: 'var(--muted)' };
   }
 }
 
@@ -68,6 +70,7 @@ export const TransferHistory: React.FC = () => {
   const [history, setHistory] = useState<TransferEntry[]>([]);
   const [trusted, setTrusted] = useState<TrustedPeer[]>([]);
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     invoke<TransferEntry[]>('get_transfer_history').then(setHistory).catch(() => setHistory([]));
@@ -80,7 +83,10 @@ export const TransferHistory: React.FC = () => {
   };
 
   const openLocation = (path: string) => {
-    invoke('reveal_in_files', { path }).catch(() => {});
+    setError(null);
+    invoke('reveal_in_files', { path }).catch(e =>
+      setError(describeError(e, 'Could not open the file manager. The file may have been moved or deleted.')),
+    );
   };
 
   return (
@@ -100,21 +106,24 @@ export const TransferHistory: React.FC = () => {
           type="button"
           onClick={() => nav('/settings')}
           title="Back to Settings"
-          className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors"
-          style={{ color: 'var(--muted)' }}
+          className="icon-button icon-button-labeled"
         >
           <ArrowLeft size={12} />
-          Settings
+          <span>Settings</span>
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-3">
+        {error && (
+          <p role="alert" className="error-text mb-2">
+            {error}
+          </p>
+        )}
         {history.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-sm" style={{ color: 'var(--muted)' }}>
-              No transfers yet.
-            </p>
-          </div>
+          <EmptyState
+            title="No transfers yet"
+            detail="Files you send to or receive from paired devices appear here."
+          />
         ) : (
           <div className="flex flex-col gap-2">
             {history.map((t, i) => {
@@ -124,6 +133,7 @@ export const TransferHistory: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setExpanded(isOpen ? null : i)}
+                    aria-expanded={isOpen}
                     className="flex items-center justify-between gap-2 px-3 py-2 w-full text-left"
                   >
                     <div className="min-w-0">
@@ -135,13 +145,10 @@ export const TransferHistory: React.FC = () => {
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <span
-                        className="text-[10px] px-1.5 py-0.5 rounded"
-                        style={statusBadgeStyle(t.status)}
-                      >
-                        {t.status}
+                      <span className="text-xs" style={{ color: statusLabel(t.status).color }}>
+                        {statusLabel(t.status).text}
                       </span>
-                      <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+                      <p className="text-xs" style={{ color: 'var(--muted)' }}>
                         {formatBytes(t.size)} | {relativeDate(t.started_at)}
                       </p>
                     </div>
@@ -158,12 +165,7 @@ export const TransferHistory: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => openLocation(t.local_path)}
-                        className="flex items-center gap-1.5 self-start px-2.5 py-1 rounded text-xs transition-colors"
-                        style={{
-                          backgroundColor: 'var(--surface-hover)',
-                          color: 'var(--accent)',
-                          border: '1px solid var(--accent)',
-                        }}
+                        className="btn btn-secondary self-start"
                       >
                         <FolderOpen size={12} />
                         Open in file manager

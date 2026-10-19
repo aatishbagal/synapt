@@ -53,9 +53,10 @@ fn activate(app: &AppHandle, token: Option<String>, timestamp: u32) {
     if let Err(error) = app.run_on_main_thread(move || {
         if let Some(window) = handle.get_webview_window("main") {
             if window.is_visible().unwrap_or(false) {
-                let _ = window.hide();
+                crate::entrance::hide(&window);
                 return;
             }
+            crate::entrance::note_show();
             #[cfg(target_os = "linux")]
             if uses_portal() {
                 use gtk::prelude::*;

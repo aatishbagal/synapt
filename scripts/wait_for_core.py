@@ -10,15 +10,46 @@ import urllib.request
 from pathlib import Path
 
 
-def required_version(manifest_path):
-    manifest = tomllib.loads(Path(manifest_path).read_text())
+def caret_allows(requirement, version):
+    """Whether a stable version satisfies a Cargo caret requirement like ^0.2.2."""
+    want = tuple(int(part) for part in requirement.split("."))
+    have = tuple(int(part) for part in version.split("."))
+    if have < want:
+        return False
+    if want[0] > 0:
+        return have[0] == want[0]
+    if want[1] > 0:
+        return have[:2] == want[:2]
+    return have == want
+
+
+def release_core_version(manifest_path):
+    """The exact SynaptCore version an app release builds against.
+
+    Cargo.toml declares a caret range so compatible core patches need no
+    manifest change; Cargo.lock records the one version actually resolved,
+    which is the release the app must wait for and check out.
+    """
+    manifest_path = Path(manifest_path)
+    manifest = tomllib.loads(manifest_path.read_text())
     requirement = manifest["dependencies"]["synapt-core"]["version"]
-    if not re.fullmatch(r"=\d+\.\d+\.\d+", requirement):
-        raise ValueError("App releases must pin an exact stable SynaptCore version")
+    if not re.fullmatch(r"\^\d+\.\d+\.\d+", requirement):
+        raise ValueError("SynaptCore must be required with a caret range such as ^0.2.2")
     linux = manifest["target"]['cfg(target_os = "linux")']["dependencies"]["synapt-core"]
     if linux["version"] != requirement:
         raise ValueError("Linux and default SynaptCore versions differ")
-    return requirement[1:]
+
+    lock = tomllib.loads((manifest_path.parent / "Cargo.lock").read_text())
+    locked = [pkg["version"] for pkg in lock.get("package", [])
+              if pkg.get("name") == "synapt-core" and "source" not in pkg]
+    if len(locked) != 1:
+        raise ValueError("Cargo.lock must contain exactly one local synapt-core entry")
+    version = locked[0]
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise ValueError(f"Locked SynaptCore {version} is not a stable release")
+    if not caret_allows(requirement[1:], version):
+        raise ValueError(f"Locked SynaptCore {version} does not satisfy {requirement}")
+    return version
 
 
 def release_ready(release, version):
@@ -57,7 +88,7 @@ def main():
     parser.add_argument("manifest")
     parser.add_argument("--timeout", type=int, default=1200)
     args = parser.parse_args()
-    version = required_version(args.manifest)
+    version = release_core_version(args.manifest)
     wait_for_release(version, args.timeout)
     with open(os.environ["GITHUB_OUTPUT"], "a") as output:
         output.write(f"ref=refs/tags/v{version}\n")

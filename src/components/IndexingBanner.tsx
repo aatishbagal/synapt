@@ -1,21 +1,33 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { FADE_IN } from '../animations';
 import { listen } from '@tauri-apps/api/event';
 import { IndexPhase, IndexProgress } from '../types';
 import { UnderlineLoader } from './UnderlineLoader';
+import { plainError } from '../utils/errors';
 
-/** Human-readable label for the current indexing phase. */
-function phaseLabel(phase: IndexPhase, filesScanned: number): string {
+/** 6px filled circle separating the phase from its detail. */
+const Separator: React.FC = () => (
+  <div
+    aria-hidden
+    className="shrink-0"
+    style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: 'var(--muted)' }}
+  />
+);
+
+/** Human-readable label for the current indexing phase, plus an optional detail. */
+function phaseLabel(phase: IndexPhase, filesScanned: number): { label: string; detail?: string } {
   switch (phase.type) {
     case 'Starting':
-      return 'Preparing index...';
+      return { label: 'Preparing index...' };
     case 'Scanning':
-      return `Scanning - ${filesScanned.toLocaleString()} files`;
+      return { label: 'Scanning', detail: `${filesScanned.toLocaleString()} files` };
     case 'BuildingIndex':
-      return 'Building search index...';
+      return { label: 'Building search index...' };
     case 'Complete':
-      return `Index complete - ${phase.total_files.toLocaleString()} files`;
+      return { label: 'Index complete', detail: `${phase.total_files.toLocaleString()} files` };
     case 'Failed':
-      return `Index failed: ${phase.reason}`;
+      return { label: 'Index failed', detail: plainError(phase.reason, 'Rescan from Settings to try again.') };
   }
 }
 
@@ -47,11 +59,9 @@ function fillPercent(progress: IndexProgress): number {
 function rightText(progress: IndexProgress): string {
   const { phase } = progress;
   if (phase.type === 'Scanning' && progress.total_dirs > 0) {
-    return `${progress.dirs_done} / ${progress.total_dirs} dirs`;
+    return `${progress.dirs_done} / ${progress.total_dirs} folders`;
   }
-  if (phase.type === 'Scanning') {
-    return `${progress.files_scanned.toLocaleString()} files`;
-  }
+  // Without a directory total the file count is already in the label.
   return '';
 }
 
@@ -84,48 +94,61 @@ export const IndexingBanner: React.FC = () => {
     };
   }, []);
 
-  if (!visible || !progress) return null;
-
-  const { phase } = progress;
+  const { label, detail } = progress ? phaseLabel(progress.phase, progress.files_scanned) : { label: '', detail: undefined };
 
   return (
-    <div
-      style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        background: 'var(--surface)',
-        borderTop: '1px solid var(--border)',
-        padding: '6px 16px',
-      }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 3,
-          background: 'var(--border)',
-        }}
-      >
-        <div
+    <AnimatePresence>
+      {visible && progress && (
+        <motion.div
+          key="indexing-banner"
+          initial={{ ...FADE_IN.initial, y: 8 }}
+          animate={{ ...FADE_IN.animate, y: 0 }}
+          exit={{ opacity: 0, y: 8 }}
+          transition={FADE_IN.transition}
           style={{
-            height: '100%',
-            width: `${fillPercent(progress)}%`,
-            background: 'var(--accent)',
-            transition: 'width 300ms ease-out',
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            background: 'var(--surface)',
+            borderTop: '1px solid var(--border)',
+            padding: '8px 16px',
           }}
-        />
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <UnderlineLoader state={loaderState(phase)} width={20} />
-        <span style={{ flex: 1, color: 'var(--text)', fontSize: 12, fontWeight: 500 }}>
-          {phaseLabel(phase, progress.files_scanned)}
-        </span>
-        <span style={{ color: 'var(--muted)', fontSize: 11 }}>{rightText(progress)}</span>
-      </div>
-    </div>
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 3,
+              background: 'var(--border)',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${fillPercent(progress)}%`,
+                background: 'var(--accent)',
+                transition: 'width var(--duration-medium) var(--ease-standard)',
+              }}
+            />
+          </div>
+          <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+            <UnderlineLoader state={loaderState(progress.phase)} width={20} />
+            <span className="flex flex-1 items-center gap-2 min-w-0">
+              <span style={{ color: 'var(--text)' }}>{label}</span>
+              {detail && (
+                <>
+                  <Separator />
+                  <span className="truncate" style={{ color: 'var(--muted)' }}>{detail}</span>
+                </>
+              )}
+            </span>
+            <span style={{ color: 'var(--muted)' }}>{rightText(progress)}</span>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

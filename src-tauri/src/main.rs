@@ -3,6 +3,7 @@
 mod commands;
 mod hotkey;
 mod crash;
+mod entrance;
 mod network;
 mod trust;
 mod storage;
@@ -143,6 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .setup(move |app| {
@@ -168,7 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 window.on_window_event(move |event| match event {
                     tauri::WindowEvent::Focused(false) => {
                         if !suppress.load(std::sync::atomic::Ordering::Relaxed) {
-                            let _ = w.hide();
+                            entrance::hide(&w);
                         }
                     }
                     // The overlay is undecorated so it has no close button, but a
@@ -176,7 +178,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // window down). Hide it instead: quitting is tray-only.
                     tauri::WindowEvent::CloseRequested { api, .. } => {
                         api.prevent_close();
-                        let _ = w.hide();
+                        entrance::hide(&w);
                     }
                     _ => {}
                 });
@@ -373,6 +375,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::remove_shared_dir,
             commands::get_setting,
             commands::set_setting,
+            commands::restart_app,
             commands::get_all_settings,
             commands::get_indexed_dir_stats,
             commands::set_device_name,
@@ -407,11 +410,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::trigger_app_scan,
             commands::hide_window,
             commands::get_crash_log_path,
+            commands::is_first_launch,
+            commands::show_main_window,
+            commands::check_crash_log,
+            commands::dismiss_crash_log,
+            commands::open_crash_report_email,
             commands::get_core_update_status,
             commands::check_core_update,
             commands::check_for_update,
             commands::install_update,
             commands::get_app_version,
+            commands::get_whats_new,
+            commands::get_last_seen_version,
+            commands::set_last_seen_version,
+            commands::open_changelog,
         ])
         .build(tauri::generate_context!())?
         .run(|_app, event| {

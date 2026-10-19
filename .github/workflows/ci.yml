@@ -85,6 +85,14 @@ jobs:
         working-directory: synapt
         run: npm ci
 
+      # Cargo.toml accepts any compatible core (^0.2.x), and core/dev may already
+      # carry a newer patch than Cargo.lock records. Resolving without --locked
+      # rewrites only the synapt-core version line (cargo update would re-resolve
+      # unrelated crates), so the --locked steps below check against core/dev.
+      - name: Refresh the synapt-core lock entry
+        working-directory: synapt/src-tauri
+        run: cargo metadata --format-version 1 > /dev/null
+
       - name: Clippy
         working-directory: synapt/src-tauri
         run: cargo clippy --locked -- -D warnings

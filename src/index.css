@@ -8,10 +8,12 @@
   --surface-hover: #2a2a2a;
   --border: #333333;
   --text: #ffffff;
-  --muted: #888888;
-  --accent: #3b82f6;
+  --muted: #919191;
+  --accent: #4f8ff7;
   --accent-soft: #1f3a72;
-  --danger: #ef4444;
+  --accent-fill: #2563eb;
+  --danger-fill: #dc2626;
+  --danger: #f16161;
   --success: #22c55e;
   --warning: #f59e0b;
   --warning-bg: #3a2e14;
@@ -27,10 +29,12 @@
   --surface-hover: #2a2a2a;
   --border: #333333;
   --text: #ffffff;
-  --muted: #888888;
-  --accent: #3b82f6;
+  --muted: #919191;
+  --accent: #4f8ff7;
   --accent-soft: #1f3a72;
-  --danger: #ef4444;
+  --accent-fill: #2563eb;
+  --danger-fill: #dc2626;
+  --danger: #f16161;
   --success: #22c55e;
   --warning: #f59e0b;
   --warning-bg: #3a2e14;
@@ -47,11 +51,13 @@
   --border: #e0e0e0;
   --text: #111111;
   --muted: #666666;
-  --accent: #2563eb;
+  --accent: #2160eb;
   --accent-soft: #dbeafe;
-  --danger: #dc2626;
-  --success: #16a34a;
-  --warning: #d97706;
+  --accent-fill: #2160eb;
+  --danger-fill: #d02222;
+  --danger: #d02222;
+  --success: #11813b;
+  --warning: #aa5d05;
   --warning-bg: #fef3c7;
   --warning-border: #fcd34d;
   --warning-text: #78350f;
@@ -67,10 +73,12 @@
     --surface-hover: #2a2a2a;
     --border: #333333;
     --text: #ffffff;
-    --muted: #888888;
-    --accent: #3b82f6;
+    --muted: #919191;
+    --accent: #4f8ff7;
     --accent-soft: #1f3a72;
-    --danger: #ef4444;
+    --accent-fill: #2563eb;
+    --danger-fill: #dc2626;
+    --danger: #f16161;
     --success: #22c55e;
     --warning: #f59e0b;
     --warning-bg: #3a2e14;
@@ -89,11 +97,13 @@
     --border: #e0e0e0;
     --text: #111111;
     --muted: #666666;
-    --accent: #2563eb;
+    --accent: #2160eb;
     --accent-soft: #dbeafe;
-    --danger: #dc2626;
-    --success: #16a34a;
-    --warning: #d97706;
+    --accent-fill: #2160eb;
+    --danger-fill: #d02222;
+    --danger: #d02222;
+    --success: #11813b;
+    --warning: #aa5d05;
     --warning-bg: #fef3c7;
     --warning-border: #fcd34d;
     --warning-text: #78350f;
@@ -102,10 +112,53 @@
   }
 }
 
+/* Theme-independent tokens: identical in dark and light, so they are declared
+   once rather than repeated in every theme block. */
+:root {
+  --on-accent: #ffffff;
+  --backdrop: rgba(0, 0, 0, 0.6);
+
+  --ease-standard: cubic-bezier(0.25, 0.1, 0.25, 1.0);
+  --ease-decelerate: cubic-bezier(0.0, 0.0, 0.2, 1.0);
+  --ease-accelerate: cubic-bezier(0.4, 0.0, 1.0, 1.0);
+  --duration-micro: 100ms;
+  --duration-short: 150ms;
+  --duration-medium: 200ms;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+/* Thin scrollbars everywhere. Firefox-style properties are the fallback; where
+   ::-webkit-scrollbar is supported they are reset so the WebKit rules below
+   control the exact size (setting scrollbar-width disables them in Chromium). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+@supports selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+
+*::-webkit-scrollbar {
+  width: 4px;
+  height: 2px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
 }
 
 /* Synapt's overlay window is transparent, so the body stays transparent and
@@ -123,7 +176,7 @@ body {
 
 .panel-root {
   opacity: 0;
-  transition: opacity 120ms ease-out;
+  transition: opacity var(--duration-short) var(--ease-standard);
 }
 
 .panel-root.panel-visible {
@@ -155,5 +208,261 @@ body {
   }
   100% {
     transform: translateX(350%);
+  }
+}
+
+/* Shared component patterns from DESIGN.md. Declared in the components layer
+   so Tailwind utilities on the same element (w-full, shrink-0, ...) still win.
+   Use these classes instead of re-creating button, input, row, heading or
+   empty-state styles inline. */
+@layer components {
+  /* Visible keyboard focus for every control; the mouse never triggers it. */
+  :focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+    outline-offset: 1px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    font-size: 13px;
+    line-height: 16px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition-property: background-color, opacity, color;
+    transition-duration: var(--duration-short);
+    transition-timing-function: var(--ease-standard);
+  }
+
+  .btn:disabled {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .btn-primary {
+    background-color: var(--accent-fill);
+    color: var(--on-accent);
+    font-weight: 500;
+  }
+
+  .btn-primary:hover {
+    opacity: 0.85;
+  }
+
+  .btn-secondary {
+    background-color: transparent;
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  .btn-secondary:hover {
+    background-color: var(--surface-hover);
+  }
+
+  .btn-destructive {
+    background-color: transparent;
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  }
+
+  .btn-destructive:hover {
+    background-color: color-mix(in srgb, var(--danger) 10%, transparent);
+  }
+
+  /* Borderless low-emphasis action, e.g. "Cancel" or "Later". */
+  .btn-ghost {
+    background-color: transparent;
+    color: var(--muted);
+  }
+
+  .btn-ghost:hover {
+    background-color: var(--surface-hover);
+    color: var(--text);
+  }
+
+  /* Header and inline icon actions. Optional text label sits beside the icon. */
+  .icon-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 4px;
+    border: none;
+    background-color: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 16px;
+    cursor: pointer;
+    transition-property: background-color, color;
+    transition-duration: var(--duration-short);
+    transition-timing-function: var(--ease-standard);
+  }
+
+  /* Icon plus a text label, e.g. "Select" or "Back". */
+  .icon-button-labeled {
+    padding: 4px 8px;
+  }
+
+  .icon-button:hover {
+    background-color: var(--surface-hover);
+    color: var(--text);
+  }
+
+  .icon-button:active {
+    background-color: var(--surface-hover);
+    color: var(--accent);
+  }
+
+  .icon-button:disabled {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .icon-button-danger {
+    color: var(--danger);
+  }
+
+  .icon-button-danger:hover {
+    background-color: color-mix(in srgb, var(--danger) 10%, transparent);
+    color: var(--danger);
+  }
+
+  .input {
+    background-color: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    line-height: 20px;
+    outline: none;
+    transition: border-color var(--duration-short) var(--ease-standard);
+  }
+
+  .input::placeholder {
+    color: var(--muted);
+  }
+
+  .input:focus,
+  .input:focus-visible,
+  .input:focus-within {
+    border-color: var(--accent);
+    outline: none;
+  }
+
+  .input:disabled {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .section-heading {
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 16px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+
+  /* Result and clip rows. Selection is a 2px accent bar on the left; rows are
+     separated by spacing, not borders. */
+  .list-row {
+    min-height: 48px;
+    padding: 12px 16px;
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    transition: background-color var(--duration-micro) var(--ease-standard);
+  }
+
+  .list-row:hover {
+    background-color: var(--surface-hover);
+  }
+
+  .list-row[data-selected="true"] {
+    background-color: var(--surface-hover);
+    border-left-color: var(--accent);
+  }
+
+  .empty-state {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 32px 24px;
+    text-align: center;
+  }
+
+  .empty-state-title {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+  }
+
+  .empty-state-detail {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 20px;
+    margin-top: 4px;
+  }
+
+  /* One-line feedback after an action fails, shown where the action lives. */
+  .error-text {
+    color: var(--danger);
+    font-size: 12px;
+    line-height: 16px;
+  }
+}
+
+/* Experimental UI scope. Overrides for the UI in development live here so they
+   only apply when the experimental_ui setting was on at launch. For now: tighter
+   list rows as a visible proof of concept. */
+[data-experimental-ui="true"] {
+  --spacing-base: 6px;
+}
+
+[data-experimental-ui="true"] .list-row {
+  min-height: 40px;
+  padding-top: var(--spacing-base);
+  padding-bottom: var(--spacing-base);
+}
+
+/* Reduced motion: collapse every animation and transition to a single instant
+   frame. Infinite loaders would otherwise flicker at 0.01ms per cycle, so they
+   run once and hold a static end frame (redefined below) that still reads as
+   "in progress". Elements marked data-motion-timer are exempt because their
+   animation is a countdown that drives behaviour, not decoration. */
+@media (prefers-reduced-motion: reduce) {
+  *:not([data-motion-timer]),
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-fill-mode: both !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  @keyframes underline-load {
+    from,
+    to {
+      left: 0%;
+      right: 0%;
+    }
+  }
+
+  @keyframes search-loading {
+    from,
+    to {
+      transform: translateX(75%);
+    }
   }
 }
