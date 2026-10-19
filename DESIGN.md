@@ -428,6 +428,31 @@ Changing the setting needs a restart. Settings > Experimental offers "Restart no
 Synapt started with; switching back withdraws the offer. The switch is a checkbox, like
 every other boolean setting.
 
+## UX Rules
+
+Rules from the v0.6.0 Nielsen heuristics and WCAG 2.1 AA audit. The findings
+below are what that audit changed in the code; they are listed so the fixes are
+kept, not re-introduced.
+
+### Findings and resolutions
+
+- Visibility of system status (1): the search bar always shows the current input mode as a text label, announced to screen readers; pairing shows "Waiting for the other device to confirm" while it waits; the folder empty state says when a rescan is running.
+- User control and freedom (3): removing a trusted device now asks first through `InlineConfirm`; Escape always backs out of the pairing dialog, rejecting an incoming request.
+- Consistency and standards (4): buttons, inputs, list rows, section headings and empty states share the classes and `EmptyState` component listed under Interactive States, instead of per-component styles.
+- Recognition rather than recall (6): the idle empty state lists every input mode (`/` folders, `@` devices, right arrow for file actions, calculations), and each no-results state says what to try next.
+- Error recovery (9): backend errors are no longer shown raw. `src/utils/errors.ts` turns them into a plain sentence with a next step, and Settings shows each failure inside the section where the action failed.
+- Accessibility: icon-only buttons carry `aria-label`, dialogs use `role="dialog"` and `aria-modal`, errors use `role="alert"`, and a global `:focus-visible` ring makes keyboard focus visible everywhere.
+- Contrast (WCAG 2.1 AA): failing text tokens were adjusted to the smallest passing value; see the Contrast table under Colour Tokens.
+
+### Standing rules for future development
+
+- All destructive actions require a confirmation step
+- All error messages state what went wrong and what to do next
+- All inputs have inline validation before submission
+- All contrast ratios meet WCAG 2.1 AA minimums
+- Plain language only - no technical terms in user-facing strings
+- Every interactive element is keyboard accessible
+
 ## What Not To Do
 
 - Do not use accent colour on card borders, section dividers, or status indicators

@@ -1337,7 +1337,7 @@ fn crash_report_mailto(content: &str) -> String {
     let body = format!(
         "Hi,\n\nI encountered a crash in {app} v{version} on {os}.\n\n\
          Crash details:\n\n{content}\n\n---\n\
-         This report was generated automatically. No personal data is included."
+         This report was generated automatically from the crash log."
     );
     // RFC 6068 wants CRLF line breaks in a mailto body.
     let body = body.replace("\r\n", "\n").replace('\n', "\r\n");
