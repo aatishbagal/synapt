@@ -1,6 +1,6 @@
 [package]
 name = "synapt"
-version = "0.5.4"
+version = "0.6.0"
 description = "Spotlight-style launcher and encrypted LAN file utility"
 authors = ["Aatish Bagal <dev@aatish.io>"]
 license = "Apache-2.0"

@@ -1,6 +1,19 @@
 {
   "versions": [
     {
+      "version": "0.6.0",
+      "date": "2026-10-19",
+      "headline": "Design system, animations, onboarding, and crash reporting.",
+      "highlights": [
+        "New design system with consistent spacing, typography, and interactive states",
+        "Spring animations on panels, dropdowns, and the overlay entrance",
+        "First-launch setup flow to get started quickly",
+        "Crash detection with opt-in email reporting",
+        "What is new modal after each update",
+        "Experimental UI flag in Settings for upcoming visual work"
+      ]
+    },
+    {
       "version": "0.5.4",
       "date": "2026-10-17",
       "headline": "The global hotkey now works on GNOME Wayland, and clipboard sharing to Linux is fixed.",

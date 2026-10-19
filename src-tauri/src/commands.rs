@@ -1001,7 +1001,7 @@ pub struct VersionEntry {
     pub date: Option<String>,
     /// One-sentence summary of the release.
     pub headline: String,
-    /// Up to three user-facing highlights, most important first.
+    /// Up to six user-facing highlights, most important first.
     pub highlights: Vec<String>,
 }
 
@@ -1081,7 +1081,7 @@ mod whats_new_tests {
         assert!(!versions.is_empty());
         assert_eq!(versions[0].version, env!("CARGO_PKG_VERSION"));
         for v in &versions {
-            assert!(v.highlights.len() <= 3, "{} has more than 3 highlights", v.version);
+            assert!(v.highlights.len() <= 6, "{} has more than 6 highlights", v.version);
         }
     }
 

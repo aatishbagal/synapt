@@ -2,6 +2,19 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.0] - 2026-10-19
+### Added
+- Design system (DESIGN.md) with 8px grid, Radix/shadcn aesthetic, and token standardisation
+- Motion (Framer Motion) spring animations for overlay entrance, panels, and dropdowns
+- CSS cubic-bezier micro-interaction curves on all interactive elements
+- First-launch onboarding flow for both apps
+- Crash detection popup with opt-in mailto email report
+- What is new modal shown once per version after an update
+- Experimental UI flag in Settings with app restart prompt
+### Fixed
+- All Nielsen usability heuristic and WCAG 2.1 AA contrast findings
+- Inconsistent spacing, colour usage, and interactive states across components
+
 ## [0.5.4] - 2026-10-17
 ### Added
 - Updates section shows the bundled SynaptCore version, compatibility warnings, and check errors

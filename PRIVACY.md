@@ -1,10 +1,10 @@
 # Privacy Policy - Synapt
 
-Last updated: August 2026
+Last updated: October 2026
 
 ## What Synapt collects
 
-Synapt does not collect any personal data. The application has no telemetry, no analytics, no crash reporting service, and no account system. Nothing is sent to any server operated by the developers.
+Synapt does not collect any personal data. The application has no telemetry, no analytics, no crash reporting service, and no account system. Nothing is sent to any server operated by the developers, and nothing reaches the developers at all unless you choose to email a crash report (see Crash reports).
 
 ## Data stored on your device
 
@@ -17,6 +17,7 @@ Synapt stores the following data locally in a SQLite database on your device:
 - An index of the applications installed on your device, used by the launcher
 - Transfer history (file names, sizes, peer device identifiers, and timestamps)
 - Application settings
+- A crash log, if Synapt has crashed, kept until you send or dismiss the crash report prompt
 
 This database is stored unencrypted in your user data directory and is readable by anything running as your user account.
 
@@ -31,6 +32,22 @@ While Synapt is running it broadcasts a presence packet on your local network so
 When you pair with another device and transfer files, the file content is sent directly from your device to the paired device over an encrypted connection (X25519 key exchange with ChaCha20-Poly1305) on your local network. File content is never routed through any external server.
 
 When SynaptClip is also installed, Synapt may receive clipboard text from a peer device and forward it to SynaptClip on the same machine over a loopback connection.
+
+## Crash reports
+
+Synapt can detect when it has crashed during a previous session. If a crash is detected on the next launch, a prompt appears offering to send a report.
+
+Crash reports are:
+
+- Opt-in only: nothing is sent without your explicit action
+- Sent via your own email client: Synapt opens a pre-filled draft and makes no network request of its own
+- Addressed to synapt.reports@aatish.io
+- Limited to the app version, the operating system, the time of the crash, the location in the code where the crash occurred, and the error message
+- Shown to you in full before sending: you can read, edit, or discard the draft in your email client
+
+Synapt does not add your files, clipboard content, or device identifiers to a crash report. The error message is produced by Synapt's own code and is not meant to contain personal data, but you can check it in the draft before you send it.
+
+You can turn off crash report prompts at any time in Settings under About, with the "Offer to email a crash report after a crash" option. The first-launch setup also asks whether to enable them.
 
 ## Permissions
 

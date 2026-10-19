@@ -5040,7 +5040,7 @@ dependencies = [
 
 [[package]]
 name = "synapt"
-version = "0.5.4"
+version = "0.6.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
