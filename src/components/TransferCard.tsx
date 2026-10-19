@@ -1,4 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { FADE_IN } from '../animations';
+import { plainError } from '../utils/errors';
 import { X } from 'lucide-react';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 
@@ -114,20 +117,21 @@ export const TransferCard: React.FC = () => {
     return () => clearTimeout(t);
   }, [entries]);
 
-  if (entries.size === 0) return null;
-
   const list = [...entries.values()];
   const totalBytes = list.reduce((sum, e) => sum + e.total, 0);
   const receivedBytes = list.reduce((sum, e) => sum + e.bytes_received, 0);
   const completed = list.filter(e => e.status === 'complete').length;
   const anyInProgress = list.some(e => e.status === 'in_progress');
   const anyFailed = list.some(e => e.status === 'failed');
-  const firstError = list.find(e => e.status === 'failed')?.error ?? 'transfer failed';
+  const firstError = plainError(
+    list.find(e => e.status === 'failed')?.error ?? '',
+    'The connection to the other device was lost. Ask them to send it again.',
+  );
 
   const pct = totalBytes > 0 ? Math.min(100, (receivedBytes / totalBytes) * 100) : anyInProgress ? 0 : 100;
 
   const fillColor = anyFailed
-    ? '#f87171'
+    ? 'var(--danger)'
     : !anyInProgress
       ? 'var(--success)'
       : 'var(--accent)';
@@ -140,7 +144,7 @@ export const TransferCard: React.FC = () => {
   const statusText = anyInProgress
     ? 'Downloading...'
     : anyFailed
-      ? `Failed: ${firstError}`
+      ? `Transfer failed. ${firstError}`
       : 'Complete';
 
   const dismiss = () => {
@@ -149,56 +153,70 @@ export const TransferCard: React.FC = () => {
   };
 
   return (
-    <div
-      className="shrink-0"
-      onMouseEnter={() => {
-        interactedRef.current = true;
-      }}
-      style={{
-        backgroundColor: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: '8px',
-        padding: '10px 14px',
-        margin: '4px',
-      }}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span
-          className="truncate"
-          style={{ color: 'var(--text)', fontSize: '13px', minWidth: 0 }}
-        >
-          {headerText}
-        </span>
-        <button
-          type="button"
-          aria-label="Dismiss transfers"
-          onClick={dismiss}
-          className="flex items-center justify-center shrink-0"
-          style={{ border: 'none', background: 'transparent', color: 'var(--muted)', cursor: 'pointer' }}
-        >
-          <X size={16} />
-        </button>
-      </div>
-      <div
-        style={{
-          width: '100%',
-          height: '3px',
-          backgroundColor: 'var(--border)',
-          borderRadius: '2px',
-          overflow: 'hidden',
-          marginTop: '8px',
-        }}
-      >
-        <div
-          style={{
-            height: '100%',
-            width: `${pct}%`,
-            backgroundColor: fillColor,
-            transition: 'width 200ms ease-out',
+    <AnimatePresence>
+      {entries.size > 0 && (
+        <motion.div
+          key="transfer-card"
+          initial={{ ...FADE_IN.initial, y: 8 }}
+          animate={{ ...FADE_IN.animate, y: 0 }}
+          exit={{ opacity: 0, y: 8 }}
+          transition={FADE_IN.transition}
+          className="shrink-0"
+          onMouseEnter={() => {
+            interactedRef.current = true;
           }}
-        />
-      </div>
-      <p style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '6px' }}>{statusText}</p>
-    </div>
+          style={{
+            backgroundColor: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            padding: '12px 16px',
+            margin: '0 12px 8px',
+          }}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span
+              className="truncate"
+              style={{ color: 'var(--text)', fontSize: '13px', minWidth: 0 }}
+            >
+              {headerText}
+            </span>
+            <button
+              type="button"
+              aria-label="Dismiss transfers"
+              title="Dismiss"
+              onClick={dismiss}
+              className="icon-button shrink-0"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div
+            style={{
+              width: '100%',
+              height: '3px',
+              backgroundColor: 'var(--border)',
+              borderRadius: '2px',
+              overflow: 'hidden',
+              marginTop: '8px',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${pct}%`,
+                backgroundColor: fillColor,
+                transition: 'width var(--duration-medium) var(--ease-standard)',
+              }}
+            />
+          </div>
+          <p
+            role="status"
+            style={{ fontSize: '12px', color: anyFailed ? 'var(--danger)' : 'var(--muted)', marginTop: '8px' }}
+          >
+            {statusText}
+          </p>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

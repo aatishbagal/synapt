@@ -187,6 +187,7 @@ fn route(handle: &AppHandle, host: &Host, cmd: TrayCommand) {
 
 fn show_self(handle: &AppHandle) {
     if let Some(window) = handle.get_webview_window(WINDOW_LABEL) {
+        crate::entrance::note_show();
         let _ = window.show();
         let _ = window.set_focus();
     }
@@ -195,8 +196,9 @@ fn show_self(handle: &AppHandle) {
 fn toggle_self(handle: &AppHandle) {
     if let Some(window) = handle.get_webview_window(WINDOW_LABEL) {
         if window.is_visible().unwrap_or(false) {
-            let _ = window.hide();
+            crate::entrance::hide(&window);
         } else {
+            crate::entrance::note_show();
             let _ = window.show();
             let _ = window.set_focus();
         }

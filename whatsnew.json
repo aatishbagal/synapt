@@ -1,0 +1,134 @@
+{
+  "versions": [
+    {
+      "version": "0.6.0",
+      "date": "2026-10-19",
+      "headline": "Design system, animations, onboarding, and crash reporting.",
+      "highlights": [
+        "New design system with consistent spacing, typography, and interactive states",
+        "Spring animations on panels, dropdowns, and the overlay entrance",
+        "First-launch setup flow to get started quickly",
+        "Crash detection with opt-in email reporting",
+        "What is new modal after each update"
+      ]
+    },
+    {
+      "version": "0.5.4",
+      "date": "2026-10-17",
+      "headline": "The global hotkey now works on GNOME Wayland, and clipboard sharing to Linux is fixed.",
+      "highlights": [
+        "The global hotkey now works on GNOME Wayland, no Xorg session needed",
+        "Clips sent from a Mac to a Linux device no longer fail with an access error",
+        "Settings now shows the SynaptCore version and warns if it needs an update"
+      ]
+    },
+    {
+      "version": "0.5.3",
+      "date": "2026-10-16",
+      "headline": "Pair devices that cannot find each other automatically.",
+      "highlights": [
+        "Pairing now works across different Wi-Fi bands using manual IP entry or invite codes",
+        "SynaptClip only lists devices that are paired and online"
+      ]
+    },
+    {
+      "version": "0.5.2",
+      "date": "2026-08-28",
+      "headline": "Automatic updates and a lighter memory footprint.",
+      "highlights": [
+        "Synapt now updates itself, with an option to check automatically",
+        "Uses noticeably less memory while running in the background",
+        "Pairing requests now show a notification even when the overlay is hidden"
+      ]
+    },
+    {
+      "version": "0.5.1",
+      "date": "2026-08-25",
+      "headline": "Safer quitting on macOS.",
+      "highlights": [
+        "Cmd+Q no longer quits Synapt by accident; quit from the menu bar icon instead",
+        "Quitting from the menu bar now asks for confirmation"
+      ]
+    },
+    {
+      "version": "0.5.0",
+      "date": "2026-08-21",
+      "headline": "Share clipboard items between devices with SynaptClip.",
+      "highlights": [
+        "Send clips between your devices when SynaptClip is installed",
+        "Settings and the overlay show whether SynaptClip is connected",
+        "Now available for Mac as a signed universal app"
+      ]
+    },
+    {
+      "version": "0.4.2",
+      "date": "2026-06-05",
+      "headline": "Pick a device with @ and work with its files and apps.",
+      "highlights": [
+        "Type @ to pick a device and search its shared files",
+        "Press the right arrow on a file to open it, show it in its folder, or send it to several devices",
+        "Launch apps on another device and follow transfers in a progress card"
+      ]
+    },
+    {
+      "version": "0.4.1",
+      "date": "2026-06-04",
+      "headline": "See indexing progress and app icons.",
+      "highlights": [
+        "A progress bar shows while your files and apps are being indexed",
+        "Applications now show their icons in results",
+        "Pairing and the duplicate tray icon on Windows are fixed"
+      ]
+    },
+    {
+      "version": "0.4.0",
+      "date": "2026-06-04",
+      "headline": "A complete Settings page, themes, and app search.",
+      "highlights": [
+        "Search and launch installed applications",
+        "Choose dark, light, or system theme, and start Synapt on login",
+        "Get notified when transfers finish and devices pair or come online"
+      ]
+    },
+    {
+      "version": "0.3.1",
+      "date": "2026-06-03",
+      "headline": "Search results now appear reliably.",
+      "highlights": [
+        "File search now returns results as soon as indexing finishes",
+        "Synapt and SynaptClip share a single tray icon",
+        "A refreshed look that matches SynaptClip"
+      ]
+    },
+    {
+      "version": "0.3.0",
+      "date": null,
+      "headline": "Faster, resumable file transfers.",
+      "highlights": [
+        "Large transfers resume where they left off after a dropped connection",
+        "Send several files at once and track each one",
+        "Synapt now runs on macOS"
+      ]
+    },
+    {
+      "version": "0.2.0",
+      "date": null,
+      "headline": "Search your files and your other devices.",
+      "highlights": [
+        "Fast file search that tolerates typos",
+        "Search a paired device's shared files with @device",
+        "Type a calculation to get the answer instantly"
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "date": null,
+      "headline": "The first Synapt release.",
+      "highlights": [
+        "Find other devices on your network and pair them with a verification code",
+        "Send files between paired devices, encrypted end to end",
+        "Choose which folders paired devices can access"
+      ]
+    }
+  ]
+}

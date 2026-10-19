@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   check:
@@ -18,6 +19,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       exists: ${{ steps.tag.outputs.exists }}
       core_ref: ${{ steps.core.outputs.ref }}
+      notes: ${{ steps.notes.outputs.body }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +39,27 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "v${{ steps.version.outputs.version }} is new - will build a release."
           fi
+
+      # Release notes come from the dev-to-main PR description, the merged PR
+      # this push belongs to. A push to main with no such PR falls back to this
+      # version's CHANGELOG.md section, so the release is never left blank.
+      - name: Release notes from the merged PR
+        if: steps.tag.outputs.exists == 'false'
+        id: notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          body=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
+            --jq '[.[] | select(.base.ref == "main")][0].body // ""')
+          if [ -z "$body" ]; then
+            body=$(awk -v v="$VERSION" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## \[/ {if (f) exit} f' CHANGELOG.md)
+          fi
+          {
+            echo 'body<<RELEASE_NOTES_EOF'
+            printf '%s\n\nDownload the installer for your platform below.\n' "$body"
+            echo 'RELEASE_NOTES_EOF'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -153,6 +176,57 @@ jobs:
           args: ${{ matrix.args }}
           tagName: v__VERSION__
           releaseName: Synapt v__VERSION__
-          releaseBody: Built from main. Download the installer for your platform below.
+          releaseBody: ${{ needs.check.outputs.notes }}
           releaseDraft: false
           prerelease: false
+
+  # Runs once every platform build has published. Release notes belong in the
+  # release PR (the app bundles whatsnew.json at build time, and a Rust test fails
+  # if the newest entry does not match the crate version), so this job is a
+  # backstop: it only adds a whatsnew.json entry or CHANGELOG.md block when the
+  # version is missing, and commits nothing otherwise.
+  #
+  # The push uses GITHUB_TOKEN, which does not trigger another workflow run. If
+  # main gets branch protection, allow github-actions[bot] to push or this step fails.
+  docs:
+    needs: [check, release]
+    if: needs.check.outputs.exists == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Backfill whatsnew.json and CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          gh release view "v$VERSION" -R "${{ github.repository }}" --json body -q .body \
+            > "$RUNNER_TEMP/release-body.md" || : > "$RUNNER_TEMP/release-body.md"
+          DATE=$(gh release view "v$VERSION" -R "${{ github.repository }}" --json publishedAt -q '.publishedAt[0:10]' \
+            2>/dev/null || date -u +%Y-%m-%d)
+          python3 scripts/update_release_docs.py "$VERSION" "$DATE" "$RUNNER_TEMP/release-body.md" \
+            --repo "${{ github.repository }}"
+
+      - name: Commit updated docs to main
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add whatsnew.json CHANGELOG.md
+          if git diff --staged --quiet; then
+            echo "whatsnew.json and CHANGELOG.md already cover v$VERSION - nothing to commit."
+            exit 0
+          fi
+          git commit -m "docs: update whatsnew.json and CHANGELOG.md for v$VERSION"
+          git push origin HEAD:main
+
+      - name: Landing page reminder
+        run: echo "The synapt-landing What's new section reads whatsnew.json from main, so no landing change is needed."
