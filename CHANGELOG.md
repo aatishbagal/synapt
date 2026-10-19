@@ -10,7 +10,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - First-launch onboarding flow for both apps
 - Crash detection popup with opt-in mailto email report
 - What is new modal shown once per version after an update
-- Experimental UI flag in Settings with app restart prompt
 ### Fixed
 - All Nielsen usability heuristic and WCAG 2.1 AA contrast findings
 - Inconsistent spacing, colour usage, and interactive states across components
