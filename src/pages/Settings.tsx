@@ -1,6 +1,6 @@
 import { useCoreUpdate } from '../hooks/useCoreUpdate';
 import { CoreUpdateNotice } from '../components/CoreUpdateNotice';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -16,6 +16,8 @@ import { ExperimentalSettings } from '../components/ExperimentalSettings';
 import { WhatsNewModal, WhatsNewEntry } from '../components/WhatsNewModal';
 import { AnimatePresence } from 'motion/react';
 import { describeError } from '../utils/errors';
+import { prettyHotkey } from '../utils/hotkey';
+import { useHotkeyRecorder } from '../hooks/useHotkeyRecorder';
 
 interface LocalIdentity {
   device_id: string;
@@ -139,41 +141,6 @@ function relativeDate(unixSeconds: number | null): string {
   return `${Math.floor(diff / day)}d ago`;
 }
 
-/** Title-case a stored hotkey string such as `ctrl+space` for display. */
-function prettyHotkey(hotkey: string): string {
-  return hotkey
-    .split('+')
-    .map(part => (part.length <= 2 ? part.toUpperCase() : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()))
-    .join('+');
-}
-
-/** Map a browser KeyboardEvent.code to a token the shortcut parser accepts. */
-function keyLabel(code: string): string {
-  const letter = /^Key([A-Z])$/.exec(code);
-  if (letter) return letter[1];
-  const digit = /^Digit(\d)$/.exec(code);
-  if (digit) return digit[1];
-  if (code.startsWith('Arrow')) return code.slice(5);
-  if (/^F\d{1,2}$/.test(code)) return code;
-  switch (code) {
-    case 'Space': return 'Space';
-    case 'Enter': return 'Enter';
-    case 'Tab': return 'Tab';
-    case 'Backspace': return 'Backspace';
-    case 'Minus': return '-';
-    case 'Equal': return '=';
-    case 'Comma': return ',';
-    case 'Period': return '.';
-    case 'Slash': return '/';
-    case 'Semicolon': return ';';
-    case 'Quote': return "'";
-    case 'BracketLeft': return '[';
-    case 'BracketRight': return ']';
-    case 'Backslash': return '\\';
-    case 'Backquote': return '`';
-    default: return code;
-  }
-}
 
 export const Settings: React.FC = () => {
   const nav = useNavigate();
@@ -192,8 +159,6 @@ export const Settings: React.FC = () => {
 
   const [hotkey, setHotkey] = useState('ctrl+space');
   const shortcut = useHotkeyInfo();
-  const [hotkeyError, setHotkeyError] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
 
   const [downloadDir, setDownloadDir] = useState('');
   const [maxResults, setMaxResults] = useState('50');
@@ -547,47 +512,7 @@ export const Settings: React.FC = () => {
   };
 
   // --- Hotkey recording ---
-  const pendingHotkey = useRef<string | null>(null);
-  useEffect(() => {
-    if (!recording) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      e.preventDefault();
-      if (e.key === 'Escape') {
-        pendingHotkey.current = null;
-        setRecording(false);
-        return;
-      }
-      // Ignore lone modifier presses; wait for a main key.
-      if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
-      const parts: string[] = [];
-      if (e.ctrlKey) parts.push('Ctrl');
-      if (e.shiftKey) parts.push('Shift');
-      if (e.altKey) parts.push('Alt');
-      if (e.metaKey) parts.push('Super');
-      parts.push(keyLabel(e.code));
-      pendingHotkey.current = parts.join('+');
-    };
-    const onKeyUp = async (e: KeyboardEvent) => {
-      e.preventDefault();
-      const combo = pendingHotkey.current;
-      if (!combo) return;
-      pendingHotkey.current = null;
-      setHotkeyError(null);
-      try {
-        await invoke('set_hotkey', { hotkey: combo });
-        setHotkey(combo);
-      } catch (error) {
-        setHotkeyError(describeError(error, 'That shortcut could not be registered. Try a different combination.'));
-      }
-      setRecording(false);
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    window.addEventListener('keyup', onKeyUp, true);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown, true);
-      window.removeEventListener('keyup', onKeyUp, true);
-    };
-  }, [recording]);
+  const { recording, setRecording, error: hotkeyError } = useHotkeyRecorder(setHotkey);
 
   // --- Preferences ---
   const changeDownloadDir = async () => {

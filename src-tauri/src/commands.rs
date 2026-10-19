@@ -1233,6 +1233,40 @@ pub fn get_crash_log_path() -> Option<String> {
         .map(|p| p.to_string_lossy().to_string())
 }
 
+/// Settings key set once the first-launch setup flow has been finished.
+const ONBOARDING_COMPLETE_KEY: &str = "onboarding_complete";
+
+/// Whether onboarding is still pending for a stored `onboarding_complete` value.
+fn onboarding_pending(value: Option<&str>) -> bool {
+    value != Some("true")
+}
+
+/// Whether the first-launch setup flow still needs to run.
+#[tauri::command]
+pub async fn is_first_launch(state: tauri::State<'_, crate::AppState>) -> Result<bool, String> {
+    let value = state
+        .db
+        .get_setting(ONBOARDING_COMPLETE_KEY)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(onboarding_pending(value.as_deref()))
+}
+
+/// Show and focus the overlay. It starts hidden and is otherwise only summoned
+/// by the hotkey or tray, so the UI calls this on first launch to put the
+/// setup flow in front of the user.
+#[tauri::command]
+pub async fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+    window.center().map_err(|e| e.to_string())?;
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Address the crash popup's report email goes to.
 const CRASH_REPORT_ADDRESS: &str = "synapt.reports@aatish.io";
 
@@ -1413,6 +1447,13 @@ mod tests {
         let known = uuid::Uuid::new_v4();
         let peers = vec![sample_trusted_peer(known)];
         assert_eq!(trusted_pubkey(&peers, &known.to_string()).unwrap(), "PUBKEY");
+    }
+
+    #[test]
+    fn onboarding_pending_until_marked_true() {
+        assert!(onboarding_pending(None));
+        assert!(onboarding_pending(Some("false")));
+        assert!(!onboarding_pending(Some("true")));
     }
 
     #[test]

@@ -409,6 +409,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::trigger_app_scan,
             commands::hide_window,
             commands::get_crash_log_path,
+            commands::is_first_launch,
+            commands::show_main_window,
             commands::check_crash_log,
             commands::dismiss_crash_log,
             commands::open_crash_report_email,

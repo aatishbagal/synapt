@@ -14,6 +14,7 @@ import { IndexingBanner } from '../components/IndexingBanner';
 import { EmptyState } from '../components/EmptyState';
 import { CrashPopup, CrashReport } from '../components/CrashPopup';
 import { WhatsNewModal, WhatsNewEntry } from '../components/WhatsNewModal';
+import { SetupFlow } from '../components/SetupFlow';
 import { Peer, SearchResult, TrustedPeer, DeviceOption, IndexProgress, IpcStatus } from '../types';
 import { useTheme } from '../hooks/useTheme';
 import { useEntranceOnShow } from '../hooks/useEntranceOnShow';
@@ -56,6 +57,7 @@ export const Overlay: React.FC = () => {
   const [crashReport, setCrashReport] = useState<CrashReport | null>(null);
   // The latest release notes and the running version they are shown for.
   const [whatsNew, setWhatsNew] = useState<{ entry: WhatsNewEntry; version: string } | null>(null);
+  const [setupPending, setSetupPending] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -83,11 +85,19 @@ export const Overlay: React.FC = () => {
     })();
   }, []);
 
-  // Show the latest release notes once per version, on the first launch after
-  // an update.
+  // A fresh install runs the setup flow, shown without waiting for the hotkey
+  // the user does not know yet, and has no release notes to announce. Any
+  // other launch shows the latest release notes once per version.
   useEffect(() => {
     (async () => {
       try {
+        if (await invoke<boolean>('is_first_launch')) {
+          setSetupPending(true);
+          invoke('show_main_window').catch(e => console.error('Failed to show the window:', e));
+          const version = await invoke<string>('get_app_version');
+          await invoke('set_last_seen_version', { version });
+          return;
+        }
         const [versions, lastSeen, current] = await Promise.all([
           invoke<WhatsNewEntry[]>('get_whats_new'),
           invoke<string | null>('get_last_seen_version'),
@@ -98,7 +108,7 @@ export const Overlay: React.FC = () => {
           setWhatsNew({ entry: latest, version: current });
         }
       } catch (e) {
-        console.error('Failed to load release notes:', e);
+        console.error('Failed to run the startup checks:', e);
       }
     })();
   }, []);
@@ -669,6 +679,15 @@ export const Overlay: React.FC = () => {
       </AnimatePresence>
 
       <IndexingBanner />
+
+      {setupPending && (
+        <SetupFlow
+          onDone={() => {
+            setSetupPending(false);
+            searchInputRef.current?.focus();
+          }}
+        />
+      )}
 
       <AnimatePresence>
         {whatsNew && (
