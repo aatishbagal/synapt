@@ -417,6 +417,10 @@ Implemented by `InlineConfirm` with `tone="danger"` (destructive confirm) or the
 
 ## Experimental UI
 
+Hidden for now: `EXPERIMENTAL_UI_AVAILABLE` in `src/experimental.ts` is `false`, which
+removes the Settings section and ignores a saved `experimental_ui` value. Set it to `true`
+to bring both back. The rest of this section describes the flag when it is available.
+
 The `experimental_ui` setting (default `false`, seeded by a migration) is read once when a
 webview starts (`src/experimental.ts`) and, when on, sets `data-experimental-ui="true"` on
 `<html>`. Work-in-progress UI goes under the `[data-experimental-ui="true"]` scope in

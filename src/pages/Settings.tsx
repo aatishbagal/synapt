@@ -13,6 +13,7 @@ import { Select } from '../components/Select';
 import { UnderlineLoader } from '../components/UnderlineLoader';
 import { InlineConfirm } from '../components/InlineConfirm';
 import { ExperimentalSettings } from '../components/ExperimentalSettings';
+import { EXPERIMENTAL_UI_AVAILABLE } from '../experimental';
 import { WhatsNewModal, WhatsNewEntry } from '../components/WhatsNewModal';
 import { AnimatePresence } from 'motion/react';
 import { describeError } from '../utils/errors';
@@ -1051,11 +1052,13 @@ export const Settings: React.FC = () => {
         </Section>
 
         {/* 10. Experimental */}
-        <Section title="Experimental">
-          <div className="px-3 py-2" style={itemCard}>
-            <ExperimentalSettings />
-          </div>
-        </Section>
+        {EXPERIMENTAL_UI_AVAILABLE && (
+          <Section title="Experimental">
+            <div className="px-3 py-2" style={itemCard}>
+              <ExperimentalSettings />
+            </div>
+          </Section>
+        )}
       </div>
 
       {manualVerify !== null && (
