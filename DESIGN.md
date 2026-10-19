@@ -114,7 +114,7 @@ Declared once in a separate `:root` block because the value is the same in both 
 | Token | Value | Use |
 |---|---|---|
 | `--on-accent` | `#ffffff` | Text on accent- or danger-filled buttons |
-| `--backdrop` | `rgba(0, 0, 0, 0.6)` | Pairing dialog backdrop |
+| `--backdrop` | `rgba(0, 0, 0, 0.6)` | Pairing dialog and What's New modal backdrop |
 
 All other tokens except the fills differ between dark and light.
 
@@ -296,6 +296,7 @@ Current code differs:
 - 100 - device picker
 - 200 - inline confirmation
 - 1000 - Select popup
+- 2000 - What's New modal
 
 ## Platform Considerations
 

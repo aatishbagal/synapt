@@ -13,6 +13,7 @@ import { Select } from '../components/Select';
 import { UnderlineLoader } from '../components/UnderlineLoader';
 import { InlineConfirm } from '../components/InlineConfirm';
 import { ExperimentalSettings } from '../components/ExperimentalSettings';
+import { WhatsNewModal, WhatsNewEntry } from '../components/WhatsNewModal';
 import { AnimatePresence } from 'motion/react';
 import { describeError } from '../utils/errors';
 
@@ -239,6 +240,7 @@ export const Settings: React.FC = () => {
   const [updateState, setUpdateState] = useState<UpdateState>({ kind: 'idle' });
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [crashReports, setCrashReports] = useState(true);
+  const [releaseNotes, setReleaseNotes] = useState<WhatsNewEntry | null>(null);
 
   const checkForUpdate = useCallback(async () => {
     setUpdateState({ kind: 'checking' });
@@ -267,6 +269,16 @@ export const Settings: React.FC = () => {
       setAutoUpdate(!enabled);
       fail('about', e, 'Could not save this setting. Try again.');
     });
+  }, [fail]);
+
+  const showReleaseNotes = useCallback(() => {
+    invoke<WhatsNewEntry[]>('get_whats_new')
+      .then(versions => setReleaseNotes(versions[0] ?? null))
+      .catch(e => fail('about', e, 'Could not load the release notes.'));
+  }, [fail]);
+
+  const openChangelog = useCallback(() => {
+    invoke('open_changelog').catch(e => fail('about', e, 'Could not open the changelog in your browser.'));
   }, [fail]);
 
   const toggleCrashReports = useCallback((enabled: boolean) => {
@@ -1004,6 +1016,9 @@ export const Settings: React.FC = () => {
             <a href={REPO_URL} target="_blank" rel="noreferrer" className="text-xs" style={{ color: 'var(--accent)' }}>
               {REPO_URL}
             </a>
+            <button type="button" onClick={showReleaseNotes} className="btn btn-secondary self-start mt-1">
+              See release notes
+            </button>
             <div className="flex flex-col gap-2 mt-1">
               {/* Integration API */}
               <div className="flex items-center justify-between">
@@ -1132,6 +1147,17 @@ export const Settings: React.FC = () => {
           }}
         />
       )}
+
+      <AnimatePresence>
+        {releaseNotes && (
+          <WhatsNewModal
+            key="whats-new"
+            data={releaseNotes}
+            onDismiss={() => setReleaseNotes(null)}
+            onSeeAll={openChangelog}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

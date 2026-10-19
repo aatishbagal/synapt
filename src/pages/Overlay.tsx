@@ -13,6 +13,7 @@ import { TransferCard } from '../components/TransferCard';
 import { IndexingBanner } from '../components/IndexingBanner';
 import { EmptyState } from '../components/EmptyState';
 import { CrashPopup, CrashReport } from '../components/CrashPopup';
+import { WhatsNewModal, WhatsNewEntry } from '../components/WhatsNewModal';
 import { Peer, SearchResult, TrustedPeer, DeviceOption, IndexProgress, IpcStatus } from '../types';
 import { useTheme } from '../hooks/useTheme';
 import { useEntranceOnShow } from '../hooks/useEntranceOnShow';
@@ -53,6 +54,8 @@ export const Overlay: React.FC = () => {
 
   const [ipcStatus, setIpcStatus] = useState<IpcStatus | null>(null);
   const [crashReport, setCrashReport] = useState<CrashReport | null>(null);
+  // The latest release notes and the running version they are shown for.
+  const [whatsNew, setWhatsNew] = useState<{ entry: WhatsNewEntry; version: string } | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -79,6 +82,42 @@ export const Overlay: React.FC = () => {
       if (report) setCrashReport(report);
     })();
   }, []);
+
+  // Show the latest release notes once per version, on the first launch after
+  // an update.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [versions, lastSeen, current] = await Promise.all([
+          invoke<WhatsNewEntry[]>('get_whats_new'),
+          invoke<string | null>('get_last_seen_version'),
+          invoke<string>('get_app_version'),
+        ]);
+        const latest = versions[0];
+        if (lastSeen !== current && latest) {
+          setWhatsNew({ entry: latest, version: current });
+        }
+      } catch (e) {
+        console.error('Failed to load release notes:', e);
+      }
+    })();
+  }, []);
+
+  const dismissWhatsNew = () => {
+    if (whatsNew) {
+      // A failed write only means the notes show again next launch.
+      invoke('set_last_seen_version', { version: whatsNew.version }).catch(e =>
+        console.error('Failed to record seen release notes:', e),
+      );
+    }
+    setWhatsNew(null);
+  };
+
+  const openChangelog = () => {
+    invoke('open_changelog').catch(e =>
+      setError(describeError(e, 'Could not open the changelog in your browser.')),
+    );
+  };
 
   const parsedInput = useMemo(
     () => parseInput(inputValue, selectedDevice !== null),
@@ -630,6 +669,17 @@ export const Overlay: React.FC = () => {
       </AnimatePresence>
 
       <IndexingBanner />
+
+      <AnimatePresence>
+        {whatsNew && (
+          <WhatsNewModal
+            key="whats-new"
+            data={whatsNew.entry}
+            onDismiss={dismissWhatsNew}
+            onSeeAll={openChangelog}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

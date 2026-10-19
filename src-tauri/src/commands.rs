@@ -1059,6 +1059,18 @@ pub async fn set_last_seen_version(
         .map_err(|e| e.to_string())
 }
 
+/// Full release history, opened by "See all changes" in the What's New modal.
+const CHANGELOG_URL: &str = "https://github.com/aatishbagal/synapt/blob/main/CHANGELOG.md";
+
+/// Open the full changelog in the default browser.
+#[tauri::command]
+pub async fn open_changelog(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(CHANGELOG_URL, None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod whats_new_tests {
     use super::parse_whats_new;
