@@ -3,6 +3,7 @@
 mod commands;
 mod hotkey;
 mod crash;
+mod entrance;
 mod network;
 mod trust;
 mod storage;
@@ -169,7 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 window.on_window_event(move |event| match event {
                     tauri::WindowEvent::Focused(false) => {
                         if !suppress.load(std::sync::atomic::Ordering::Relaxed) {
-                            let _ = w.hide();
+                            entrance::hide(&w);
                         }
                     }
                     // The overlay is undecorated so it has no close button, but a
@@ -177,7 +178,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // window down). Hide it instead: quitting is tray-only.
                     tauri::WindowEvent::CloseRequested { api, .. } => {
                         api.prevent_close();
-                        let _ = w.hide();
+                        entrance::hide(&w);
                     }
                     _ => {}
                 });

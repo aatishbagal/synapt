@@ -1077,6 +1077,7 @@ export const Settings: React.FC = () => {
         {releaseNotes && (
           <WhatsNewModal
             key="whats-new"
+            title="What's new in Synapt"
             data={releaseNotes}
             onDismiss={() => setReleaseNotes(null)}
             onSeeAll={openChangelog}

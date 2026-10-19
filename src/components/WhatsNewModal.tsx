@@ -13,6 +13,8 @@ export interface WhatsNewEntry {
 }
 
 interface WhatsNewModalProps {
+  /** What the modal announces, such as "Synapt was updated". */
+  title: string;
   data: WhatsNewEntry;
   onDismiss: () => void;
   onSeeAll: () => void;
@@ -29,7 +31,7 @@ function formatReleaseDate(date: string): string {
  * Release notes for one version, over a dimmed window. The parent wraps it in
  * AnimatePresence for the exit, during which further actions are ignored.
  */
-export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ data, onDismiss, onSeeAll }) => {
+export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ title, data, onDismiss, onSeeAll }) => {
   const reduceMotion = useReducedMotion();
   const isPresent = useIsPresent();
   const gotItRef = useRef<HTMLButtonElement>(null);
@@ -66,7 +68,7 @@ export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ data, onDismiss, o
     <motion.div
       role="dialog"
       aria-modal="true"
-      aria-labelledby="whats-new-headline"
+      aria-labelledby="whats-new-title"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -92,9 +94,9 @@ export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ data, onDismiss, o
         }}
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs" style={{ color: 'var(--muted)', fontFamily: 'monospace' }}>
-            v{data.version}
-          </span>
+          <h2 id="whats-new-title" className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+            {title}
+          </h2>
           <button
             type="button"
             aria-label="Close"
@@ -106,20 +108,16 @@ export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ data, onDismiss, o
           </button>
         </div>
 
-        <h2
-          id="whats-new-headline"
-          className="text-[13px] font-medium"
-          style={{ color: 'var(--text)', marginTop: 8 }}
-        >
-          {data.headline}
-        </h2>
-        {data.date && (
-          <p className="text-xs" style={{ color: 'var(--muted)', marginTop: 4 }}>
-            {formatReleaseDate(data.date)}
-          </p>
-        )}
+        <p className="text-[13px]" style={{ color: 'var(--muted)', marginTop: 4 }}>
+          Version {data.version}
+          {data.date && ` | ${formatReleaseDate(data.date)}`}
+        </p>
 
-        <ul className="list-disc space-y-2" style={{ marginTop: 16, paddingLeft: 16 }}>
+        <p className="text-[13px] font-medium" style={{ color: 'var(--text)', marginTop: 16 }}>
+          {data.headline}
+        </p>
+
+        <ul className="list-disc space-y-2" style={{ marginTop: 8, paddingLeft: 16 }}>
           {data.highlights.map(item => (
             <li key={item} className="text-[13px]" style={{ color: 'var(--text)' }}>
               {item}
@@ -131,7 +129,7 @@ export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ data, onDismiss, o
           <button
             type="button"
             onClick={seeAll}
-            className="text-xs hover:underline"
+            className="text-[13px] hover:underline"
             style={{ color: 'var(--accent)' }}
           >
             See all changes

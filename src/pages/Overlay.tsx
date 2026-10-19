@@ -693,6 +693,7 @@ export const Overlay: React.FC = () => {
         {whatsNew && (
           <WhatsNewModal
             key="whats-new"
+            title="Synapt was updated"
             data={whatsNew.entry}
             onDismiss={dismissWhatsNew}
             onSeeAll={openChangelog}

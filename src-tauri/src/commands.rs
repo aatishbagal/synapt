@@ -832,10 +832,9 @@ pub async fn trigger_app_scan(state: tauri::State<'_, crate::AppState>) -> Resul
 #[tauri::command]
 pub async fn hide_window(app: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
-    app.get_webview_window("main")
-        .ok_or_else(|| "no window".to_string())?
-        .hide()
-        .map_err(|e| e.to_string())
+    let window = app.get_webview_window("main").ok_or_else(|| "no window".to_string())?;
+    crate::entrance::hide(&window);
+    Ok(())
 }
 
 /// Run a local search and return ranked results.
@@ -1261,6 +1260,7 @@ pub async fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "main window not found".to_string())?;
+    crate::entrance::note_show();
     window.center().map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())?;
