@@ -238,6 +238,7 @@ export const Settings: React.FC = () => {
   const [appVersion, setAppVersion] = useState('');
   const [updateState, setUpdateState] = useState<UpdateState>({ kind: 'idle' });
   const [autoUpdate, setAutoUpdate] = useState(true);
+  const [crashReports, setCrashReports] = useState(true);
 
   const checkForUpdate = useCallback(async () => {
     setUpdateState({ kind: 'checking' });
@@ -264,6 +265,14 @@ export const Settings: React.FC = () => {
     setAutoUpdate(enabled);
     invoke('set_setting', { key: 'auto_update_check', value: String(enabled) }).catch(e => {
       setAutoUpdate(!enabled);
+      fail('about', e, 'Could not save this setting. Try again.');
+    });
+  }, [fail]);
+
+  const toggleCrashReports = useCallback((enabled: boolean) => {
+    setCrashReports(enabled);
+    invoke('set_setting', { key: 'crash_reports_enabled', value: String(enabled) }).catch(e => {
+      setCrashReports(!enabled);
       fail('about', e, 'Could not save this setting. Try again.');
     });
   }, [fail]);
@@ -309,6 +318,7 @@ export const Settings: React.FC = () => {
       setIncludeHidden(settings.include_hidden === 'true');
       setNotifications(settings.notifications_enabled !== 'false');
       setAutoUpdate(settings.auto_update_check !== 'false');
+      setCrashReports(settings.crash_reports_enabled !== 'false');
       setDownloadDir(settings.download_dir ?? '');
       setHotkey(settings.hotkey ?? 'ctrl+space');
       const t = settings.theme ?? 'dark';
@@ -1066,6 +1076,17 @@ export const Settings: React.FC = () => {
                   </span>
                 </label>
               </div>
+              <label className="flex items-center gap-2 cursor-pointer mt-1">
+                <input
+                  type="checkbox"
+                  checked={crashReports}
+                  onChange={e => toggleCrashReports(e.target.checked)}
+                  style={{ accentColor: 'var(--accent)' }}
+                />
+                <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                  Offer to email a crash report after a crash
+                </span>
+              </label>
               {crashLogPath && (
                 <div className="flex flex-col mt-1">
                   <p className="text-[11px] break-all" style={{ color: 'var(--muted)' }}>

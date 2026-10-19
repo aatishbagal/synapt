@@ -143,6 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .setup(move |app| {
@@ -408,6 +409,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::trigger_app_scan,
             commands::hide_window,
             commands::get_crash_log_path,
+            commands::check_crash_log,
+            commands::dismiss_crash_log,
+            commands::open_crash_report_email,
             commands::get_core_update_status,
             commands::check_core_update,
             commands::check_for_update,

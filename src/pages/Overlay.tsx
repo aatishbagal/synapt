@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Settings as SettingsIcon } from 'lucide-react';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { PairingDialog } from '../components/PairingDialog';
 import { SearchBar } from '../components/SearchBar';
 import { ResultList } from '../components/ResultList';
@@ -12,6 +12,7 @@ import { SearchLoadingBar } from '../components/SearchLoadingBar';
 import { TransferCard } from '../components/TransferCard';
 import { IndexingBanner } from '../components/IndexingBanner';
 import { EmptyState } from '../components/EmptyState';
+import { CrashPopup, CrashReport } from '../components/CrashPopup';
 import { Peer, SearchResult, TrustedPeer, DeviceOption, IndexProgress, IpcStatus } from '../types';
 import { useTheme } from '../hooks/useTheme';
 import { useEntranceOnShow } from '../hooks/useEntranceOnShow';
@@ -51,6 +52,7 @@ export const Overlay: React.FC = () => {
   const [sendToDevicesPath, setSendToDevicesPath] = useState<string | null>(null);
 
   const [ipcStatus, setIpcStatus] = useState<IpcStatus | null>(null);
+  const [crashReport, setCrashReport] = useState<CrashReport | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -65,6 +67,17 @@ export const Overlay: React.FC = () => {
     load();
     const id = setInterval(load, 30000);
     return () => clearInterval(id);
+  }, []);
+
+  // Offer to report a crash from the previous session, unless crash report
+  // prompts are turned off in Settings. A missing setting means on.
+  useEffect(() => {
+    (async () => {
+      const enabled = await invoke<string | null>('get_setting', { key: 'crash_reports_enabled' }).catch(() => null);
+      if (enabled === 'false') return;
+      const report = await invoke<CrashReport | null>('check_crash_log').catch(() => null);
+      if (report) setCrashReport(report);
+    })();
   }, []);
 
   const parsedInput = useMemo(
@@ -604,6 +617,17 @@ export const Overlay: React.FC = () => {
           onClose={() => setIncomingPair(null)}
         />
       )}
+
+      <AnimatePresence>
+        {crashReport && (
+          <CrashPopup
+            key="crash-popup"
+            report={crashReport}
+            onSend={() => setCrashReport(null)}
+            onDismiss={() => setCrashReport(null)}
+          />
+        )}
+      </AnimatePresence>
 
       <IndexingBanner />
     </motion.div>

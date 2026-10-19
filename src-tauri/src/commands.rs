@@ -1221,6 +1221,98 @@ pub fn get_crash_log_path() -> Option<String> {
         .map(|p| p.to_string_lossy().to_string())
 }
 
+/// Address the crash popup's report email goes to.
+const CRASH_REPORT_ADDRESS: &str = "synapt.reports@aatish.io";
+
+/// How much of the crash log goes into the report. Reports are appended, so
+/// the tail holds the newest crash, and a mailto URL much longer than this
+/// once encoded is cut off by some mail clients.
+const CRASH_REPORT_MAX_CHARS: usize = 2000;
+
+/// A crash log left by a previous session, as shown in the crash popup.
+#[derive(serde::Serialize)]
+pub struct CrashReport {
+    pub path: String,
+    pub content: String,
+    pub version: String,
+    pub os: String,
+}
+
+/// The crash log left by a previous session, or None when there is none.
+#[tauri::command]
+pub async fn check_crash_log() -> Result<Option<CrashReport>, String> {
+    let Some(path) = crate::crash::log_path().filter(|p| p.is_file()) else {
+        return Ok(None);
+    };
+    let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    if content.trim().is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(CrashReport {
+        path: path.to_string_lossy().to_string(),
+        content: tail_chars(&content, CRASH_REPORT_MAX_CHARS),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        os: os_label(),
+    }))
+}
+
+/// Delete the crash log once the user has sent or dismissed it, so the popup
+/// does not come back on the next launch.
+#[tauri::command]
+pub async fn dismiss_crash_log() -> Result<(), String> {
+    let Some(path) = crate::crash::log_path() else {
+        return Ok(());
+    };
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Open the user's email client with a crash report addressed and filled in.
+///
+/// Nothing is sent from here: the user reviews the draft and sends it, or not.
+#[tauri::command]
+pub async fn open_crash_report_email(content: String, app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(crash_report_mailto(&content), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+/// Build the mailto: URL for a crash report with `content` as its details.
+fn crash_report_mailto(content: &str) -> String {
+    let app = crate::crash::APP_NAME;
+    let version = env!("CARGO_PKG_VERSION");
+    let os = os_label();
+    let content = tail_chars(content, CRASH_REPORT_MAX_CHARS);
+    let subject = format!("Crash report - {app} v{version} - {os}");
+    let body = format!(
+        "Hi,\n\nI encountered a crash in {app} v{version} on {os}.\n\n\
+         Crash details:\n\n{content}\n\n---\n\
+         This report was generated automatically. No personal data is included."
+    );
+    // RFC 6068 wants CRLF line breaks in a mailto body.
+    let body = body.replace("\r\n", "\n").replace('\n', "\r\n");
+    format!(
+        "mailto:{CRASH_REPORT_ADDRESS}?subject={}&body={}",
+        urlencoding::encode(&subject),
+        urlencoding::encode(&body),
+    )
+}
+
+/// Operating system and architecture, e.g. "macos aarch64".
+fn os_label() -> String {
+    format!("{} {}", std::env::consts::OS, std::env::consts::ARCH)
+}
+
+/// The last `max` characters of `s`.
+fn tail_chars(s: &str, max: usize) -> String {
+    let skip = s.chars().count().saturating_sub(max);
+    s.chars().skip(skip).collect()
+}
+
 /// Log the current memory footprint at info level, tagged with `phase`.
 ///
 /// Called around the application scan and once the file index is ready, so a
@@ -1309,5 +1401,21 @@ mod tests {
         let known = uuid::Uuid::new_v4();
         let peers = vec![sample_trusted_peer(known)];
         assert_eq!(trusted_pubkey(&peers, &known.to_string()).unwrap(), "PUBKEY");
+    }
+
+    #[test]
+    fn tail_chars_keeps_the_newest_end_of_the_log() {
+        assert_eq!(tail_chars("first\nsecond", 6), "second");
+        assert_eq!(tail_chars("short", 100), "short");
+    }
+
+    #[test]
+    fn crash_report_mailto_encodes_content_into_the_body() {
+        let url = crash_report_mailto("a & b ?subject=x");
+        assert!(url.starts_with("mailto:synapt.reports@aatish.io?subject="));
+        // Reserved characters in the log must not open new query parameters.
+        assert_eq!(url.matches('&').count(), 1);
+        assert!(url.contains("a%20%26%20b%20%3Fsubject%3Dx"));
+        assert!(url.contains(crate::crash::APP_NAME));
     }
 }

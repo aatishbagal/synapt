@@ -45,6 +45,8 @@ tauri-plugin-notification = "2"
 axum = "0.7"
 reqwest = { version = "0.12", default-features = false }
 tauri-plugin-updater = "2"
+urlencoding = "2"
+tauri-plugin-opener = "2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 synapt-core = { path = "../../synapt-core", version = "^0.2.2", features = ["updates", "portal-hotkey"] }
