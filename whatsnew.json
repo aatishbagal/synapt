@@ -3,7 +3,7 @@
     {
       "version": "0.6.1",
       "date": "2026-10-22",
-      "headline": "Fixed excessive disk usage on macOS.",
+      "headline": "Hotfix: fixed excessive disk usage on macOS.",
       "highlights": [
         "Synapt no longer reindexes your files on every launch",
         "Disk writes are now near zero when the app is idle",

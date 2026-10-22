@@ -2,7 +2,7 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.6.1] - 2026-10-22
+## [0.6.1] - 2026-10-22 (hotfix)
 ### Changed
 - Indexed folders are no longer rescanned automatically once a day; use Rescan in Settings to pick up changes made outside Synapt
 ### Fixed
