@@ -333,32 +333,68 @@ impl Db {
         Ok(row)
     }
 
-    /// Insert or replace a single file row in the index.
+    /// Insert or update a single file row in the index.
+    #[cfg(test)]
     pub async fn upsert_file(&self, row: &FileRow) -> Result<(), DbError> {
-        sqlx::query(
-            "INSERT OR REPLACE INTO files \
-               (name, path, parent_path, type, size, last_modified, extension, is_hidden) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&row.name)
-        .bind(&row.path)
-        .bind(&row.parent_path)
-        .bind(&row.file_type)
-        .bind(row.size)
-        .bind(row.last_modified)
-        .bind(&row.extension)
-        .bind(row.is_hidden)
-        .execute(&self.pool)
-        .await?;
+        self.upsert_files(std::slice::from_ref(row)).await
+    }
+
+    /// Insert or update file rows in one transaction.
+    ///
+    /// A row whose stored values already match is left untouched, so rescanning
+    /// an unchanged tree writes almost nothing. Committing once per call rather
+    /// than once per row avoids a journal write and fsync for every file.
+    pub async fn upsert_files(&self, rows: &[FileRow]) -> Result<(), DbError> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let mut tx = self.pool.begin().await?;
+        for row in rows {
+            sqlx::query(
+                "INSERT INTO files \
+                   (name, path, parent_path, type, size, last_modified, extension, is_hidden) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?) \
+                 ON CONFLICT(path) DO UPDATE SET \
+                   name = excluded.name, parent_path = excluded.parent_path, \
+                   type = excluded.type, size = excluded.size, \
+                   last_modified = excluded.last_modified, extension = excluded.extension, \
+                   is_hidden = excluded.is_hidden \
+                 WHERE files.name IS NOT excluded.name \
+                    OR files.parent_path IS NOT excluded.parent_path \
+                    OR files.type IS NOT excluded.type \
+                    OR files.size IS NOT excluded.size \
+                    OR files.last_modified IS NOT excluded.last_modified \
+                    OR files.extension IS NOT excluded.extension \
+                    OR files.is_hidden IS NOT excluded.is_hidden",
+            )
+            .bind(&row.name)
+            .bind(&row.path)
+            .bind(&row.parent_path)
+            .bind(&row.file_type)
+            .bind(row.size)
+            .bind(row.last_modified)
+            .bind(&row.extension)
+            .bind(row.is_hidden)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
         Ok(())
     }
 
-    /// Delete an indexed file by its absolute path.
-    pub async fn delete_file_by_path(&self, path: &str) -> Result<(), DbError> {
-        sqlx::query("DELETE FROM files WHERE path = ?")
-            .bind(path)
-            .execute(&self.pool)
-            .await?;
+    /// Delete indexed files by absolute path in one transaction.
+    pub async fn delete_files_by_path(&self, paths: &[String]) -> Result<(), DbError> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let mut tx = self.pool.begin().await?;
+        for path in paths {
+            sqlx::query("DELETE FROM files WHERE path = ?")
+                .bind(path)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
         Ok(())
     }
 
@@ -560,5 +596,70 @@ impl Db {
             .await?;
         sqlx::migrate!().run(&pool).await?;
         Ok(Self { pool })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file_row(path: &str, size: i64) -> FileRow {
+        FileRow {
+            name: path.rsplit('/').next().unwrap_or(path).to_string(),
+            path: path.to_string(),
+            parent_path: "/tmp".to_string(),
+            file_type: "file".to_string(),
+            size: Some(size),
+            last_modified: Some(1),
+            extension: None,
+            is_hidden: 0,
+        }
+    }
+
+    async fn row_id(db: &Db, path: &str) -> i64 {
+        sqlx::query_scalar("SELECT id FROM files WHERE path = ?")
+            .bind(path)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn upsert_files_inserts_every_row() {
+        let db = Db::open_in_memory().await.unwrap();
+        let rows: Vec<FileRow> = (0..5).map(|i| file_row(&format!("/tmp/f{i}"), i)).collect();
+        db.upsert_files(&rows).await.unwrap();
+        assert_eq!(db.count_files().await.unwrap(), 5);
+    }
+
+    #[tokio::test]
+    async fn upsert_files_leaves_unchanged_rows_in_place() {
+        // INSERT OR REPLACE deleted and reinserted every row on each rescan; the
+        // upsert must keep an unchanged row (and its id) as it is.
+        let db = Db::open_in_memory().await.unwrap();
+        db.upsert_files(&[file_row("/tmp/a", 10)]).await.unwrap();
+        let before = row_id(&db, "/tmp/a").await;
+        db.upsert_files(&[file_row("/tmp/a", 10)]).await.unwrap();
+        assert_eq!(row_id(&db, "/tmp/a").await, before);
+        assert_eq!(db.count_files().await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn upsert_files_updates_changed_rows() {
+        let db = Db::open_in_memory().await.unwrap();
+        db.upsert_files(&[file_row("/tmp/a", 10)]).await.unwrap();
+        db.upsert_files(&[file_row("/tmp/a", 99)]).await.unwrap();
+        let rows = db.get_all_files_for_index().await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].size, Some(99));
+    }
+
+    #[tokio::test]
+    async fn delete_files_by_path_removes_only_listed_rows() {
+        let db = Db::open_in_memory().await.unwrap();
+        let rows: Vec<FileRow> = ["/tmp/a", "/tmp/b", "/tmp/c"].iter().map(|p| file_row(p, 1)).collect();
+        db.upsert_files(&rows).await.unwrap();
+        db.delete_files_by_path(&["/tmp/a".to_string(), "/tmp/c".to_string()]).await.unwrap();
+        assert_eq!(db.get_all_file_paths().await.unwrap(), vec!["/tmp/b".to_string()]);
     }
 }

@@ -13,6 +13,9 @@ const MAX_FILE_SIZE_BYTES: u64 = 10 * 1024 * 1024;
 /// Emit a progress event after every this many files scanned.
 const EMIT_EVERY_N_FILES: u64 = 250;
 
+/// Rows written to SQLite per transaction during a scan or prune.
+const WRITE_BATCH_SIZE: usize = 2000;
+
 /// Tauri event name carrying [`IndexProgress`] updates to the frontend.
 pub const INDEX_PROGRESS_EVENT: &str = "index-progress";
 
@@ -168,12 +171,38 @@ async fn scan_all(db: &Db, include_hidden: bool, app: &AppHandle) -> Result<u64,
     Ok(total)
 }
 
-/// Recursively scan a single directory, upserting each qualifying file.
-fn scan_dir<'a>(
+/// Recursively scan a single directory, upserting each qualifying file in
+/// batched transactions. Returns the number of files (not directories) found.
+async fn scan_dir(
+    db: &Db,
+    dir: &Path,
+    include_hidden: bool,
+    progress: Option<&ScanState<'_>>,
+) -> Result<u64, IndexError> {
+    let mut pending = Vec::with_capacity(WRITE_BATCH_SIZE);
+    let count = walk_dir(db, dir, include_hidden, progress, &mut pending).await?;
+    db.upsert_files(&pending).await?;
+    Ok(count)
+}
+
+/// Queue a row for writing, flushing the queue to the database once it is full.
+async fn queue_row(db: &Db, pending: &mut Vec<FileRow>, row: FileRow) -> Result<(), IndexError> {
+    pending.push(row);
+    if pending.len() >= WRITE_BATCH_SIZE {
+        db.upsert_files(pending).await?;
+        pending.clear();
+    }
+    Ok(())
+}
+
+/// Recursive worker for [`scan_dir`]; rows go into `pending` rather than
+/// straight to the database.
+fn walk_dir<'a>(
     db: &'a Db,
     dir: &'a Path,
     include_hidden: bool,
     progress: Option<&'a ScanState<'a>>,
+    pending: &'a mut Vec<FileRow>,
 ) -> Pin<Box<dyn Future<Output = Result<u64, IndexError>> + Send + 'a>> {
     Box::pin(async move {
         let mut count = 0u64;
@@ -226,8 +255,8 @@ fn scan_dir<'a>(
                     extension: None,
                     is_hidden: if is_hidden { 1 } else { 0 },
                 };
-                db.upsert_file(&dir_row).await?;
-                count += scan_dir(db, &path, include_hidden, progress).await.unwrap_or(0);
+                queue_row(db, pending, dir_row).await?;
+                count += walk_dir(db, &path, include_hidden, progress, pending).await.unwrap_or(0);
             } else if file_type.is_file() {
                 let meta = match entry.metadata().await {
                     Ok(m) => m,
@@ -256,7 +285,7 @@ fn scan_dir<'a>(
                     extension,
                     is_hidden: if is_hidden { 1 } else { 0 },
                 };
-                db.upsert_file(&row).await?;
+                queue_row(db, pending, row).await?;
                 count += 1;
                 if let Some(p) = progress {
                     let scanned = p.files_scanned.fetch_add(1, Ordering::Relaxed) + 1;
@@ -273,14 +302,37 @@ fn scan_dir<'a>(
 /// Remove index rows whose backing file no longer exists on disk.
 pub async fn prune_deleted(db: &Db) -> Result<u64, IndexError> {
     let paths = db.get_all_file_paths().await?;
-    let mut removed = 0u64;
-    for path in paths {
-        if !Path::new(&path).exists() {
-            db.delete_file_by_path(&path).await?;
-            removed += 1;
-        }
+    let missing: Vec<String> = paths.into_iter().filter(|p| !Path::new(p).exists()).collect();
+    for chunk in missing.chunks(WRITE_BATCH_SIZE) {
+        db.delete_files_by_path(chunk).await?;
     }
-    Ok(removed)
+    Ok(missing.len() as u64)
+}
+
+/// Decide whether startup needs a full filesystem scan.
+///
+/// The scan is skipped when the full-text index exists on disk, the files table
+/// has rows, and a full scan has completed at least once. An interrupted first
+/// scan records no `last_full_index`, so the next launch scans again instead of
+/// trusting a partial index. Later rescans are explicit: the Settings rescan
+/// button or adding an indexed directory.
+pub async fn should_run_startup_scan(db: &Db, index_on_disk: bool) -> bool {
+    if !index_on_disk {
+        tracing::info!("indexer: no full-text index on disk; running full scan");
+        return true;
+    }
+    let file_count = db.count_files().await.unwrap_or(0);
+    if file_count == 0 {
+        tracing::info!("indexer: index found but the database has no files; running full scan");
+        return true;
+    }
+    let scan_completed = matches!(db.get_setting("last_full_index").await, Ok(Some(_)));
+    if !scan_completed {
+        tracing::info!("indexer: no completed full scan recorded; running full scan");
+        return true;
+    }
+    tracing::info!("indexer: existing index found with {} entries; skipping startup scan", file_count);
+    false
 }
 
 #[cfg(test)]
@@ -390,5 +442,83 @@ mod tests {
         let count = scan_dir(&db, &dir, true, None).await.unwrap();
         assert_eq!(count, 2);
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[tokio::test]
+    async fn scan_dir_flushes_rows_across_batches() {
+        let db = Db::open_in_memory().await.unwrap();
+        let dir = temp_dir();
+        for i in 0..(WRITE_BATCH_SIZE + 5) {
+            write_file(&dir, &format!("f{i}.txt"), 1);
+        }
+        let count = scan_dir(&db, &dir, false, None).await.unwrap();
+        assert_eq!(count as usize, WRITE_BATCH_SIZE + 5);
+        assert_eq!(db.count_files().await.unwrap() as usize, WRITE_BATCH_SIZE + 5);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[tokio::test]
+    async fn rescan_does_not_duplicate_rows() {
+        let db = Db::open_in_memory().await.unwrap();
+        let dir = temp_dir();
+        write_file(&dir, "a.txt", 10);
+        scan_dir(&db, &dir, false, None).await.unwrap();
+        scan_dir(&db, &dir, false, None).await.unwrap();
+        assert_eq!(db.count_files().await.unwrap(), 1);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[tokio::test]
+    async fn prune_deleted_removes_missing_files() {
+        let db = Db::open_in_memory().await.unwrap();
+        let dir = temp_dir();
+        write_file(&dir, "keep.txt", 10);
+        write_file(&dir, "gone.txt", 10);
+        scan_dir(&db, &dir, false, None).await.unwrap();
+        std::fs::remove_file(dir.join("gone.txt")).unwrap();
+
+        assert_eq!(prune_deleted(&db).await.unwrap(), 1);
+        let paths = db.get_all_file_paths().await.unwrap();
+        assert_eq!(paths.len(), 1);
+        assert!(paths[0].ends_with("keep.txt"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Database with one indexed file and, optionally, a completed full scan.
+    async fn db_with_file(scan_completed: bool) -> Db {
+        let db = Db::open_in_memory().await.unwrap();
+        let dir = temp_dir();
+        write_file(&dir, "a.txt", 10);
+        scan_dir(&db, &dir, false, None).await.unwrap();
+        std::fs::remove_dir_all(&dir).ok();
+        if scan_completed {
+            db.set_setting("last_full_index", "1").await.unwrap();
+        }
+        db
+    }
+
+    #[tokio::test]
+    async fn startup_scan_skipped_when_index_and_completed_scan_exist() {
+        let db = db_with_file(true).await;
+        assert!(!should_run_startup_scan(&db, true).await);
+    }
+
+    #[tokio::test]
+    async fn startup_scan_runs_when_index_missing_on_disk() {
+        let db = db_with_file(true).await;
+        assert!(should_run_startup_scan(&db, false).await);
+    }
+
+    #[tokio::test]
+    async fn startup_scan_runs_when_database_empty() {
+        let db = Db::open_in_memory().await.unwrap();
+        db.set_setting("last_full_index", "1").await.unwrap();
+        assert!(should_run_startup_scan(&db, true).await);
+    }
+
+    #[tokio::test]
+    async fn startup_scan_runs_after_interrupted_first_scan() {
+        let db = db_with_file(false).await;
+        assert!(should_run_startup_scan(&db, true).await);
     }
 }

@@ -1,5 +1,5 @@
 use crate::storage::{Db, FileRow};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tantivy::collector::TopDocs;
 use tantivy::directory::MmapDirectory;
@@ -65,6 +65,20 @@ pub struct FileIndex {
     reader: IndexReader,
     schema: FileSchema,
     writer: Arc<RwLock<IndexWriter>>,
+}
+
+/// The canonical on-disk location of the full-text index, next to `synapt.db`:
+/// `<data dir>/synapt/tantivy_index`. Every caller must use this so the startup
+/// check and the index itself always agree on the path.
+pub fn index_dir() -> Option<PathBuf> {
+    dirs::data_dir().map(|d| d.join("synapt").join("tantivy_index"))
+}
+
+/// True when a tantivy index has been created in `index_dir` (tantivy writes
+/// `meta.json` when it creates an index). Check this before [`FileIndex::open`],
+/// which creates the file itself.
+pub fn index_exists_on_disk(index_dir: &Path) -> bool {
+    index_dir.join("meta.json").exists()
 }
 
 /// Replace tantivy query-syntax characters with spaces so user input is treated literally.
@@ -140,6 +154,11 @@ impl FileIndex {
         writer.commit()?;
         self.reader.reload()?;
         Ok(count)
+    }
+
+    /// Number of live documents in the last committed index.
+    pub fn num_docs(&self) -> u64 {
+        self.reader.searcher().num_docs()
     }
 
     /// Add a single file to the index and make it immediately searchable.
@@ -231,6 +250,41 @@ mod tests {
         assert!(!dir.exists());
         let _index = FileIndex::open(dir.clone()).unwrap();
         assert!(dir.exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn index_dir_sits_beside_the_database_under_the_data_dir() {
+        // Same base and folder names as Db::open, on every platform: the data dir
+        // is ~/Library/Application Support (macOS), ~/.local/share (Linux) or
+        // %APPDATA% (Windows).
+        let dir = index_dir().unwrap();
+        assert_eq!(dir, dirs::data_dir().unwrap().join("synapt").join("tantivy_index"));
+    }
+
+    #[test]
+    fn index_exists_on_disk_only_after_open() {
+        let dir = temp_index_dir();
+        assert!(!index_exists_on_disk(&dir));
+        let _index = FileIndex::open(dir.clone()).unwrap();
+        assert!(index_exists_on_disk(&dir));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn reopened_index_keeps_committed_documents() {
+        // Startup skips the rebuild when the reopened index already matches the
+        // database, so a reopen must see what the last run committed.
+        let dir = temp_index_dir();
+        {
+            let index = FileIndex::open(dir.clone()).unwrap();
+            index.add_file(&file_row("a.txt")).unwrap();
+            index.add_file(&file_row("b.txt")).unwrap();
+            assert_eq!(index.num_docs(), 2);
+        }
+        let reopened = FileIndex::open(dir.clone()).unwrap();
+        assert_eq!(reopened.num_docs(), 2);
+        assert_eq!(reopened.search("a", 10).unwrap(), vec!["/tmp/a.txt".to_string()]);
         std::fs::remove_dir_all(&dir).ok();
     }
 
