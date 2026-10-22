@@ -2,6 +2,14 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.1] - 2026-10-22
+### Changed
+- Indexed folders are no longer rescanned automatically once a day; use Rescan in Settings to pick up changes made outside Synapt
+### Fixed
+- Synapt no longer rescans your folders and rebuilds its search index on every launch on macOS
+- Indexing writes far less to disk: file entries are saved in batches and unchanged files are skipped
+- Disk writes drop to near zero when the app is idle after indexing completes
+
 ## [0.6.0] - 2026-10-19
 ### Added
 - Design system (DESIGN.md) with 8px grid, Radix/shadcn aesthetic, and token standardisation
