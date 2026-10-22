@@ -94,9 +94,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pair_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<bool>>>> = Arc::new(Mutex::new(None));
     let pending_pair: Arc<Mutex<Option<network::peer::PendingPairing>>> = Arc::new(Mutex::new(None));
 
-    let mut index_path = dirs::data_dir().ok_or("no data dir")?;
-    index_path.push("synapt");
-    index_path.push("tantivy_index");
+    let index_path = search::index::index_dir().ok_or("no data dir")?;
+    // Checked before opening, because opening creates an empty index.
+    let index_on_disk = search::index::index_exists_on_disk(&index_path);
     let file_index = Arc::new(FileIndex::open(index_path)?);
     let search_engine =
         Arc::new(SearchEngine::init(Arc::clone(&db), Arc::clone(&file_index)).await?);
@@ -286,22 +286,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .map(|v| v == "true")
                     .unwrap_or(false);
 
-                // Avoid re-walking the filesystem on every launch. Only run a full
-                // scan when the index is empty, was never fully built, or the last
-                // completed scan is stale. A completed scan records
-                // `last_full_index`; an interrupted one does not, so the next launch
-                // rescans rather than trusting a partial index.
-                const STALE_SCAN_SECS: i64 = 24 * 60 * 60;
-                let file_count = db4.count_files().await.unwrap_or(0);
-                let last_full = db4
-                    .get_setting("last_full_index")
-                    .await
-                    .ok()
-                    .flatten()
-                    .and_then(|v| v.parse::<i64>().ok())
-                    .unwrap_or(0);
-                let now = chrono::Utc::now().timestamp();
-                let needs_scan = file_count == 0 || (now - last_full) >= STALE_SCAN_SECS;
+                // Avoid re-walking the filesystem on every launch: reuse the
+                // persisted index unless it is missing or was never fully built.
+                let needs_scan = search::indexer::should_run_startup_scan(&db4, index_on_disk).await;
 
                 let total = if needs_scan {
                     // run_full_scan raises is_indexing and, on error, emits Failed
@@ -318,32 +305,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     total
                 } else {
-                    tracing::info!(
-                        "index is fresh ({} files, last full scan {}s ago); skipping startup filesystem scan",
-                        file_count,
-                        now - last_full
-                    );
-                    file_count as u64
+                    0
                 };
 
-                // Rebuild the in-memory search structures from the persisted DB rows
-                // (cheap relative to a filesystem walk), whether or not a scan ran.
-                match fi.rebuild_from_db(&db4).await {
-                    Ok(n) => tracing::info!("tantivy: index rebuilt with {} documents", n),
-                    Err(e) => {
-                        tracing::error!("full-text index rebuild error: {}", e);
-                        if needs_scan {
-                            search::indexer::finish_err(&handle3, &indexing, e.to_string());
+                // Rewrite the full-text index only when a scan changed the rows or
+                // it no longer matches the database (schema reset, interrupted
+                // rescan). Otherwise the committed index on disk is already current.
+                let row_count = db4.count_files().await.unwrap_or(0);
+                let indexed_docs = fi.num_docs();
+                if needs_scan || i64::try_from(indexed_docs).ok() != Some(row_count) {
+                    match fi.rebuild_from_db(&db4).await {
+                        Ok(n) => tracing::info!("tantivy: index rebuilt with {} documents", n),
+                        Err(e) => {
+                            tracing::error!("full-text index rebuild error: {}", e);
+                            if needs_scan {
+                                search::indexer::finish_err(&handle3, &indexing, e.to_string());
+                            }
+                            return;
                         }
+                    }
+                } else {
+                    tracing::info!("tantivy: existing index matches the database ({} documents); skipping rebuild", indexed_docs);
+                }
+                // SearchEngine::init already built the Trie and Bloom filter from
+                // these rows, so they only need rebuilding after a scan.
+                if needs_scan {
+                    if let Err(e) = se.rebuild().await {
+                        tracing::error!("search engine rebuild error: {}", e);
+                        search::indexer::finish_err(&handle3, &indexing, e.to_string());
                         return;
                     }
-                }
-                if let Err(e) = se.rebuild().await {
-                    tracing::error!("search engine rebuild error: {}", e);
-                    if needs_scan {
-                        search::indexer::finish_err(&handle3, &indexing, e.to_string());
-                    }
-                    return;
                 }
                 ready.store(true, std::sync::atomic::Ordering::Relaxed);
                 commands::log_memory_snapshot("index ready", &se);

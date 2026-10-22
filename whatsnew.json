@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "version": "0.6.1",
+      "date": "2026-10-22",
+      "headline": "Hotfix: fixed excessive disk usage on macOS.",
+      "highlights": [
+        "Synapt no longer reindexes your files on every launch",
+        "Disk writes are now near zero when the app is idle",
+        "Search loads from the existing index immediately on restart",
+        "Use Rescan in Settings to pick up files changed outside Synapt"
+      ]
+    },
+    {
       "version": "0.6.0",
       "date": "2026-10-19",
       "headline": "Design system, animations, onboarding, and crash reporting.",
