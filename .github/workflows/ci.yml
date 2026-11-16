@@ -105,9 +105,9 @@ jobs:
         working-directory: synapt
         run: npm run build
 
-      - name: Debug build
-        working-directory: synapt/src-tauri
-        run: cargo build --locked
+      - name: Tauri debug build
+        working-directory: synapt
+        run: npm run tauri build -- --debug --no-bundle -- --locked
 
   windows-check:
     name: Windows updater build
@@ -139,6 +139,9 @@ jobs:
       - name: Refresh the synapt-core lock entry
         working-directory: synapt/src-tauri
         run: cargo metadata --format-version 1 > $null
+      - name: Tauri Windows debug build
+        working-directory: synapt
+        run: npm run tauri build -- --debug --no-bundle -- --locked
       - name: Check Windows updater and app targets
         working-directory: synapt/src-tauri
         run: cargo check --locked --all-targets
