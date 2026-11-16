@@ -24,14 +24,14 @@ class CoreReleaseTests(unittest.TestCase):
     def test_current_manifest_resolves_a_compatible_locked_core(self):
         manifest = Path(__file__).resolve().parents[1] / 'src-tauri/Cargo.toml'
         version = wait_for_core.release_core_version(manifest)
-        self.assertTrue(wait_for_core.caret_allows('0.2.2', version), version)
+        self.assertTrue(wait_for_core.caret_allows('0.2.3', version), version)
 
     def test_exact_unbounded_or_mismatched_requirements_are_rejected(self):
         source = (Path(__file__).resolve().parents[1] / 'src-tauri/Cargo.toml').read_text()
-        for replacement in ['=0.2.2', '>=0.2.2', '*', '0.2.2', '^0.3.0']:
+        for replacement in ['=0.2.3', '>=0.2.3', '*', '0.2.3', '^0.3.0']:
             with tempfile.TemporaryDirectory() as tmp:
                 manifest = self.manifest_copy(
-                    tmp, source.replace('version = "^0.2.2"', f'version = "{replacement}"', 1))
+                    tmp, source.replace('version = "^0.2.3"', f'version = "{replacement}"', 1))
                 with self.assertRaises(ValueError):
                     wait_for_core.release_core_version(manifest)
 
@@ -41,7 +41,7 @@ class CoreReleaseTests(unittest.TestCase):
             Path(__file__).resolve().parents[1] / 'src-tauri/Cargo.toml')
         entry = f'name = "synapt-core"\nversion = "{current}"'
         self.assertIn(entry, lock)
-        for locked in ['0.2.1', '0.3.0', '0.2.9-beta.1']:
+        for locked in ['0.2.1', '0.2.2', '0.3.0', '0.2.9-beta.1']:
             with tempfile.TemporaryDirectory() as tmp:
                 manifest = self.manifest_copy(
                     tmp, lock_text=lock.replace(entry, f'name = "synapt-core"\nversion = "{locked}"'))
@@ -53,10 +53,10 @@ class CoreReleaseTests(unittest.TestCase):
                 wait_for_core.release_core_version(manifest)
 
     def test_caret_ranges_follow_cargo_rules(self):
-        self.assertTrue(wait_for_core.caret_allows('0.2.2', '0.2.2'))
-        self.assertTrue(wait_for_core.caret_allows('0.2.2', '0.2.9'))
-        self.assertFalse(wait_for_core.caret_allows('0.2.2', '0.2.1'))
-        self.assertFalse(wait_for_core.caret_allows('0.2.2', '0.3.0'))
+        self.assertTrue(wait_for_core.caret_allows('0.2.3', '0.2.3'))
+        self.assertTrue(wait_for_core.caret_allows('0.2.3', '0.2.9'))
+        self.assertFalse(wait_for_core.caret_allows('0.2.3', '0.2.1'))
+        self.assertFalse(wait_for_core.caret_allows('0.2.3', '0.3.0'))
         self.assertTrue(wait_for_core.caret_allows('1.2.0', '1.9.0'))
         self.assertFalse(wait_for_core.caret_allows('1.2.0', '2.0.0'))
         self.assertFalse(wait_for_core.caret_allows('0.0.3', '0.0.4'))

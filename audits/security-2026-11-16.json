@@ -1,0 +1,3741 @@
+{
+  "date": "2026-11-16",
+  "type": "security",
+  "triggered_by": "Dependabot alerts",
+  "repos_audited": [
+    "synapt",
+    "synapt-clip",
+    "synapt-core"
+  ],
+  "versions": {
+    "synapt": "0.6.2",
+    "synapt-clip": "0.6.1",
+    "synapt-core": "0.2.3"
+  },
+  "core_release": "https://github.com/aatishbagal/synapt-core/releases/tag/v0.2.3",
+  "cargo_alerts": [
+    {
+      "crate": "crossbeam-epoch",
+      "advisory": "RUSTSEC-2026-0204",
+      "cve": null,
+      "aliases": [],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Invalid pointer dereference in `fmt::Pointer` impl for `Atomic` and `Shared` when the underlying pointer is invalid",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Search dependency; invalid-pointer formatting not observed in app code. Updated defensively.",
+      "old_version": "0.9.18",
+      "new_version": [
+        "0.9.20"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.9.20"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0204.html"
+    },
+    {
+      "crate": "libsqlite3-sys",
+      "advisory": "RUSTSEC-2026-0459",
+      "cve": "CVE-2026-119375",
+      "aliases": [
+        "CVE-2026-119375",
+        "GHSA-72w2-rjgg-q729"
+      ],
+      "severity": "unscored",
+      "cvss": "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+      "description": "`libsqlite3-sys` via C SQLite CVE-2026-119375",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Runtime SQLite storage; exploit needs attacker-controlled database plus sibling WAL. Both apps now test that linked SQLite is at least 3.54.0.",
+      "old_version": "0.30.1",
+      "new_version": [
+        "0.39.1"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.39.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0459.html"
+    },
+    {
+      "crate": "quick-xml",
+      "advisory": "RUSTSEC-2026-0195",
+      "cve": null,
+      "aliases": [],
+      "severity": "high",
+      "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+      "description": "Unbounded namespace-declaration allocation in `NsReader` enables memory-exhaustion denial of service",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Inspected plist uses plain Reader without affected attribute iteration; notification crate used escaping. Patched via plist and notification parent releases.",
+      "old_version": "0.37.5",
+      "new_version": [
+        "0.41.0"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.41.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0195.html"
+    },
+    {
+      "crate": "quick-xml",
+      "advisory": "RUSTSEC-2026-0194",
+      "cve": null,
+      "aliases": [],
+      "severity": "high",
+      "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+      "description": "Quadratic run time when checking a start tag for duplicate attribute names",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Inspected plist uses plain Reader without affected attribute iteration; notification crate used escaping. Patched via plist and notification parent releases.",
+      "old_version": "0.37.5",
+      "new_version": [
+        "0.41.0"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.41.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0194.html"
+    },
+    {
+      "crate": "quick-xml",
+      "advisory": "RUSTSEC-2026-0195",
+      "cve": null,
+      "aliases": [],
+      "severity": "high",
+      "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+      "description": "Unbounded namespace-declaration allocation in `NsReader` enables memory-exhaustion denial of service",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Inspected plist uses plain Reader without affected attribute iteration; notification crate used escaping. Patched via plist and notification parent releases.",
+      "old_version": "0.39.4",
+      "new_version": [
+        "0.41.0"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.41.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0195.html"
+    },
+    {
+      "crate": "quick-xml",
+      "advisory": "RUSTSEC-2026-0194",
+      "cve": null,
+      "aliases": [],
+      "severity": "high",
+      "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+      "description": "Quadratic run time when checking a start tag for duplicate attribute names",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Inspected plist uses plain Reader without affected attribute iteration; notification crate used escaping. Patched via plist and notification parent releases.",
+      "old_version": "0.39.4",
+      "new_version": [
+        "0.41.0"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.41.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0194.html"
+    },
+    {
+      "crate": "rsa",
+      "advisory": "RUSTSEC-2023-0071",
+      "cve": "CVE-2023-49092",
+      "aliases": [
+        "CVE-2023-49092",
+        "GHSA-c38w-74pg-36hr",
+        "GHSA-4grx-2x9w-596c"
+      ],
+      "severity": "moderate",
+      "cvss": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N",
+      "description": "Marvin Attack: potential key recovery through timing sidechannels",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Only optional sqlx-mysql lockfile path. Both apps use SQLite. cargo tree --target all -i rsa has no compiled path. SQLx pins its MySQL backend to 0.8.6, whose rsa requirement is ^0.9, incompatible with patched 0.10.0.",
+      "old_version": "0.9.10",
+      "new_version": [
+        "0.9.10"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "deferred",
+      "patched_range": [
+        ">=0.10.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2023-0071.html"
+    },
+    {
+      "crate": "rustls",
+      "advisory": "RUSTSEC-2026-0346",
+      "cve": "CVE-2026-123609",
+      "aliases": [
+        "CVE-2026-123609",
+        "GHSA-c8m5-c952-6cm4"
+      ],
+      "severity": "moderate",
+      "cvss": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:H/I:N/A:N",
+      "description": "`Debug` impls for client session values expose TLS secrets",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Used for runtime HTTPS through reqwest/updater. No affected custom session Debug formatting found; rustls Brotli feature disabled. TLS handshake path potentially reachable; key-exchange downgrade depends on provider and server policy.",
+      "old_version": "0.23.43",
+      "new_version": [
+        "0.23.46"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.23.46"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0346.html"
+    },
+    {
+      "crate": "rustls",
+      "advisory": "RUSTSEC-2026-0285",
+      "cve": "CVE-2026-123613",
+      "aliases": [
+        "CVE-2026-123613",
+        "GHSA-2mjx-qc3c-rqvc"
+      ],
+      "severity": "moderate",
+      "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+      "description": "TLS 1.3 handshake messages incorrectly accepted across encryption level boundaries",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Used for runtime HTTPS through reqwest/updater. No affected custom session Debug formatting found; rustls Brotli feature disabled. TLS handshake path potentially reachable; key-exchange downgrade depends on provider and server policy.",
+      "old_version": "0.23.43",
+      "new_version": [
+        "0.23.46"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.23.45"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0285.html"
+    },
+    {
+      "crate": "rustls",
+      "advisory": "RUSTSEC-2026-0348",
+      "cve": "CVE-2026-123610",
+      "aliases": [
+        "CVE-2026-123610",
+        "GHSA-h2v8-394m-p7vv"
+      ],
+      "severity": "low",
+      "cvss": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L",
+      "description": "Brotli certificate decompression can allocate up to 1 GiB before authentication",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Used for runtime HTTPS through reqwest/updater. No affected custom session Debug formatting found; rustls Brotli feature disabled. TLS handshake path potentially reachable; key-exchange downgrade depends on provider and server policy.",
+      "old_version": "0.23.43",
+      "new_version": [
+        "0.23.46"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.23.46"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0348.html"
+    },
+    {
+      "crate": "rustls",
+      "advisory": "RUSTSEC-2026-0349",
+      "cve": "CVE-2026-123611",
+      "aliases": [
+        "CVE-2026-123611",
+        "GHSA-w44r-93j7-qv28"
+      ],
+      "severity": "low",
+      "cvss": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N",
+      "description": "Unauthenticated ServerHello can downgrade later connections to classical key exchange",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Used for runtime HTTPS through reqwest/updater. No affected custom session Debug formatting found; rustls Brotli feature disabled. TLS handshake path potentially reachable; key-exchange downgrade depends on provider and server policy.",
+      "old_version": "0.23.43",
+      "new_version": [
+        "0.23.46"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.23.46"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0349.html"
+    },
+    {
+      "crate": "rustls-webpki",
+      "advisory": "RUSTSEC-2026-0382",
+      "cve": "CVE-2026-111943",
+      "aliases": [
+        "CVE-2026-111943"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Certificate verification may accept distrusted intermediates",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Runtime TLS certificate validation; exposure depends on peer chain and configured trust anchors.",
+      "old_version": "0.103.14",
+      "new_version": [
+        "0.103.16"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.103.16, <0.104.0-alpha.1",
+        ">=0.104.0-alpha.8"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0382.html"
+    },
+    {
+      "crate": "webpki-root-certs",
+      "advisory": "RUSTSEC-2026-0383",
+      "cve": "CVE-2026-111943",
+      "aliases": [
+        "CVE-2026-111943"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Bundled root certificates allow trust in distrusted emSign intermediates",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Target-specific platform verifier bundled root path.",
+      "old_version": "1.0.9",
+      "new_version": [
+        "1.0.10"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=1.0.10"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0383.html"
+    },
+    {
+      "crate": "webpki-roots",
+      "advisory": "RUSTSEC-2026-0381",
+      "cve": "CVE-2026-111943",
+      "aliases": [
+        "CVE-2026-111943"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Bundled root certificates allow trust in distrusted emSign intermediates",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Bundled TLS roots used for runtime HTTPS.",
+      "old_version": "1.0.9",
+      "new_version": [
+        "1.0.10"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=1.0.10"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0381.html"
+    },
+    {
+      "crate": "zip",
+      "advisory": "RUSTSEC-2026-0429",
+      "cve": "CVE-2026-115909",
+      "aliases": [
+        "CVE-2026-115909",
+        "GHSA-q7v9-x93c-xqv3"
+      ],
+      "severity": "high",
+      "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+      "description": "zip: `ZipArchive::extract` aborts the process on a symlink entry with a large declared size",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Windows updater extracts ZIP archives only after Minisign verification. Symlink allocation was reachable there; dual-header cloaking exploit workflow was not found. AES support was disabled; Unix permission paths are not used by the Windows updater.",
+      "old_version": "4.6.1",
+      "new_version": [
+        "9.0.5"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=9.0.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0429.html"
+    },
+    {
+      "crate": "zip",
+      "advisory": "RUSTSEC-2026-0367",
+      "cve": null,
+      "aliases": [
+        "GHSA-vv5m-jxxh-4627"
+      ],
+      "severity": "high",
+      "cvss": "CVSS:3.1/AV:L/AC:L/PR:L/UI:R/S:U/C:H/I:H/A:H",
+      "description": " Insecure Preservation of SUID/SGID Bits during ZIP Extraction Leading to Potential Privilege Escalation",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Windows updater extracts ZIP archives only after Minisign verification. Symlink allocation was reachable there; dual-header cloaking exploit workflow was not found. AES support was disabled; Unix permission paths are not used by the Windows updater.",
+      "old_version": "4.6.1",
+      "new_version": [
+        "9.0.5"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=9.0.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0367.html"
+    },
+    {
+      "crate": "zip",
+      "advisory": "RUSTSEC-2026-0368",
+      "cve": null,
+      "aliases": [
+        "GHSA-4v9h-p7m9-rh26"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "zip: `ZipArchive::extract` creates symbolic links whose attacker-controlled targets are outside the destination directory",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Windows updater extracts ZIP archives only after Minisign verification. Symlink allocation was reachable there; dual-header cloaking exploit workflow was not found. AES support was disabled; Unix permission paths are not used by the Windows updater.",
+      "old_version": "4.6.1",
+      "new_version": [
+        "9.0.5"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=9.0.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0368.html"
+    },
+    {
+      "crate": "zip",
+      "advisory": "RUSTSEC-2026-0369",
+      "cve": null,
+      "aliases": [
+        "GHSA-4684-h2q9-2vcp"
+      ],
+      "severity": "critical",
+      "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:H",
+      "description": "ZipStreamReader::extract() and ZipArchive::extract() apply Unix permissions through symlinks without confining the target",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Windows updater extracts ZIP archives only after Minisign verification. Symlink allocation was reachable there; dual-header cloaking exploit workflow was not found. AES support was disabled; Unix permission paths are not used by the Windows updater.",
+      "old_version": "4.6.1",
+      "new_version": [
+        "9.0.5"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=9.0.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0369.html"
+    },
+    {
+      "crate": "zstd",
+      "advisory": "RUSTSEC-2026-0391",
+      "cve": null,
+      "aliases": [],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Data from an abandoned stream leaks into the next stream on a reused context",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Tantivy uses bulk compression/decompression; abandoned stream reuse path not observed, complete downstream proof not claimed.",
+      "old_version": "0.13.3",
+      "new_version": [
+        "0.13.4"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        "^0.13.4",
+        ">=0.14.3"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0391.html"
+    },
+    {
+      "crate": "zstd-safe",
+      "advisory": "RUSTSEC-2026-0403",
+      "cve": null,
+      "aliases": [],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Uninitialized memory exposed when streaming decompression of a legacy frame fails",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Tantivy compression; seekable feature disabled, legacy feature enabled but affected streaming caller not found in inspected bulk path. Updated defensively.",
+      "old_version": "7.2.4",
+      "new_version": [
+        "7.4.0"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        "^7.4.0",
+        ">=8.2.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0403.html"
+    },
+    {
+      "crate": "zstd-safe",
+      "advisory": "RUSTSEC-2026-0398",
+      "cve": null,
+      "aliases": [],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "`Seekable::decompress` sets a `Vec` length beyond its capacity for offsets past the end",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Tantivy compression; seekable feature disabled, legacy feature enabled but affected streaming caller not found in inspected bulk path. Updated defensively.",
+      "old_version": "7.2.4",
+      "new_version": [
+        "7.4.0"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        "^7.4.0",
+        ">=8.2.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0398.html"
+    },
+    {
+      "crate": "zstd-sys",
+      "advisory": "RUSTSEC-2026-0410",
+      "cve": null,
+      "aliases": [],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "WebAssembly allocator shim corrupts memory on allocation failure",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Advisory concerns wasm32 allocator; shipped Rust desktop targets are native.",
+      "old_version": "2.0.16+zstd.1.5.7",
+      "new_version": [
+        "2.1.2+zstd.1.5.7"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=2.1.2"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0410.html"
+    },
+    {
+      "crate": "h2",
+      "advisory": "RUSTSEC-2026-0258",
+      "cve": null,
+      "aliases": [
+        "GHSA-q83h-524g-xf6h"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "h2 unbounded empty DATA frames",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "SynaptClip HTTP/2 enabled through reqwest/hyper; malicious peer/undrained frames required.",
+      "old_version": "0.4.14",
+      "new_version": [
+        "0.4.16"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.4.16"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0258.html"
+    },
+    {
+      "crate": "libsqlite3-sys",
+      "advisory": "RUSTSEC-2026-0459",
+      "cve": "CVE-2026-119375",
+      "aliases": [
+        "CVE-2026-119375",
+        "GHSA-72w2-rjgg-q729"
+      ],
+      "severity": "unscored",
+      "cvss": "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+      "description": "`libsqlite3-sys` via C SQLite CVE-2026-119375",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Runtime SQLite storage; exploit needs attacker-controlled database plus sibling WAL. Both apps now test that linked SQLite is at least 3.54.0.",
+      "old_version": "0.27.0",
+      "new_version": [
+        "0.39.1"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.39.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0459.html"
+    },
+    {
+      "crate": "quick-xml",
+      "advisory": "RUSTSEC-2026-0195",
+      "cve": null,
+      "aliases": [],
+      "severity": "high",
+      "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+      "description": "Unbounded namespace-declaration allocation in `NsReader` enables memory-exhaustion denial of service",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Inspected plist uses plain Reader without affected attribute iteration; notification crate used escaping. Patched via plist and notification parent releases.",
+      "old_version": "0.38.4",
+      "new_version": [
+        "0.41.0"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.41.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0195.html"
+    },
+    {
+      "crate": "quick-xml",
+      "advisory": "RUSTSEC-2026-0194",
+      "cve": null,
+      "aliases": [],
+      "severity": "high",
+      "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+      "description": "Quadratic run time when checking a start tag for duplicate attribute names",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Inspected plist uses plain Reader without affected attribute iteration; notification crate used escaping. Patched via plist and notification parent releases.",
+      "old_version": "0.38.4",
+      "new_version": [
+        "0.41.0"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.41.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0194.html"
+    },
+    {
+      "crate": "quinn-proto",
+      "advisory": "RUSTSEC-2026-0342",
+      "cve": null,
+      "aliases": [
+        "GHSA-2hv7-gw8g-gpq5"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Zero-length DATAGRAM frames bypass the receive buffer limit in quinn-proto",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Optional reqwest HTTP/3 is disabled in the app feature graph.",
+      "old_version": "0.11.14",
+      "new_version": [
+        "0.11.19"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.11.17"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0342.html"
+    },
+    {
+      "crate": "quinn-proto",
+      "advisory": "RUSTSEC-2026-0339",
+      "cve": null,
+      "aliases": [
+        "GHSA-hmxj-32vh-65vr"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Unbounded growth of pending connection ID retirements in quinn-proto",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Optional reqwest HTTP/3 is disabled in the app feature graph.",
+      "old_version": "0.11.14",
+      "new_version": [
+        "0.11.19"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.11.17"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0339.html"
+    },
+    {
+      "crate": "quinn-proto",
+      "advisory": "RUSTSEC-2026-0523",
+      "cve": null,
+      "aliases": [
+        "GHSA-53rm-773f-4q8c"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "MAX_STREAM_DATA frame can open streams beyond the stream limit",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Optional reqwest HTTP/3 is disabled in the app feature graph.",
+      "old_version": "0.11.14",
+      "new_version": [
+        "0.11.19"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.11.19"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0523.html"
+    },
+    {
+      "crate": "quinn-proto",
+      "advisory": "RUSTSEC-2026-0338",
+      "cve": null,
+      "aliases": [
+        "GHSA-465w-v9q3-7j98"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Remote peer can panic quinn-proto with zero-length STREAM frames during unordered reads",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Optional reqwest HTTP/3 is disabled in the app feature graph.",
+      "old_version": "0.11.14",
+      "new_version": [
+        "0.11.19"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.11.18"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0338.html"
+    },
+    {
+      "crate": "quinn-proto",
+      "advisory": "RUSTSEC-2026-0524",
+      "cve": null,
+      "aliases": [
+        "GHSA-wppq-2f6r-wfvm"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Long Retry token can panic or exhaust memory in a QUIC client",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Optional reqwest HTTP/3 is disabled in the app feature graph.",
+      "old_version": "0.11.14",
+      "new_version": [
+        "0.11.19"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.11.19"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0524.html"
+    },
+    {
+      "crate": "quinn-proto",
+      "advisory": "RUSTSEC-2026-0340",
+      "cve": null,
+      "aliases": [
+        "GHSA-3g6h-r5qx-f6hq"
+      ],
+      "severity": "high",
+      "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+      "description": "Peer minimum ACK delay can panic quinn-proto when ACK_FREQUENCY transmission is enabled",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Optional reqwest HTTP/3 is disabled in the app feature graph.",
+      "old_version": "0.11.14",
+      "new_version": [
+        "0.11.19"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.11.18"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0340.html"
+    },
+    {
+      "crate": "quinn-proto",
+      "advisory": "RUSTSEC-2026-0185",
+      "cve": "CVE-2026-25800",
+      "aliases": [
+        "CVE-2026-25800",
+        "GHSA-4w2j-m93h-cj5j"
+      ],
+      "severity": "high",
+      "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+      "description": " Remote memory exhaustion in quinn-proto from unbounded out-of-order stream reassembly",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Optional reqwest HTTP/3 is disabled in the app feature graph.",
+      "old_version": "0.11.14",
+      "new_version": [
+        "0.11.19"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.11.15"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0185.html"
+    },
+    {
+      "crate": "quinn-udp",
+      "advisory": "RUSTSEC-2026-0538",
+      "cve": null,
+      "aliases": [
+        "GHSA-6pp4-4cxf-xf88"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Receive loop can spin after a truncated datagram",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Optional reqwest HTTP/3 is disabled in the app feature graph.",
+      "old_version": "0.5.14",
+      "new_version": [
+        "0.5.16"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.5.16, <0.6.0",
+        ">=0.6.3"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0538.html"
+    },
+    {
+      "crate": "rsa",
+      "advisory": "RUSTSEC-2023-0071",
+      "cve": "CVE-2023-49092",
+      "aliases": [
+        "CVE-2023-49092",
+        "GHSA-c38w-74pg-36hr",
+        "GHSA-4grx-2x9w-596c"
+      ],
+      "severity": "moderate",
+      "cvss": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N",
+      "description": "Marvin Attack: potential key recovery through timing sidechannels",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Only optional sqlx-mysql lockfile path. Both apps use SQLite. cargo tree --target all -i rsa has no compiled path. SQLx pins its MySQL backend to 0.8.6, whose rsa requirement is ^0.9, incompatible with patched 0.10.0.",
+      "old_version": "0.9.10",
+      "new_version": [
+        "0.9.10"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "deferred",
+      "patched_range": [
+        ">=0.10.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2023-0071.html"
+    },
+    {
+      "crate": "rustls",
+      "advisory": "RUSTSEC-2026-0346",
+      "cve": "CVE-2026-123609",
+      "aliases": [
+        "CVE-2026-123609",
+        "GHSA-c8m5-c952-6cm4"
+      ],
+      "severity": "moderate",
+      "cvss": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:H/I:N/A:N",
+      "description": "`Debug` impls for client session values expose TLS secrets",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Used for runtime HTTPS through reqwest/updater. No affected custom session Debug formatting found; rustls Brotli feature disabled. TLS handshake path potentially reachable; key-exchange downgrade depends on provider and server policy.",
+      "old_version": "0.23.40",
+      "new_version": [
+        "0.23.46"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.23.46"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0346.html"
+    },
+    {
+      "crate": "rustls",
+      "advisory": "RUSTSEC-2026-0285",
+      "cve": "CVE-2026-123613",
+      "aliases": [
+        "CVE-2026-123613",
+        "GHSA-2mjx-qc3c-rqvc"
+      ],
+      "severity": "moderate",
+      "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+      "description": "TLS 1.3 handshake messages incorrectly accepted across encryption level boundaries",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Used for runtime HTTPS through reqwest/updater. No affected custom session Debug formatting found; rustls Brotli feature disabled. TLS handshake path potentially reachable; key-exchange downgrade depends on provider and server policy.",
+      "old_version": "0.23.40",
+      "new_version": [
+        "0.23.46"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.23.45"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0285.html"
+    },
+    {
+      "crate": "rustls",
+      "advisory": "RUSTSEC-2026-0348",
+      "cve": "CVE-2026-123610",
+      "aliases": [
+        "CVE-2026-123610",
+        "GHSA-h2v8-394m-p7vv"
+      ],
+      "severity": "low",
+      "cvss": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L",
+      "description": "Brotli certificate decompression can allocate up to 1 GiB before authentication",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Used for runtime HTTPS through reqwest/updater. No affected custom session Debug formatting found; rustls Brotli feature disabled. TLS handshake path potentially reachable; key-exchange downgrade depends on provider and server policy.",
+      "old_version": "0.23.40",
+      "new_version": [
+        "0.23.46"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.23.46"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0348.html"
+    },
+    {
+      "crate": "rustls",
+      "advisory": "RUSTSEC-2026-0349",
+      "cve": "CVE-2026-123611",
+      "aliases": [
+        "CVE-2026-123611",
+        "GHSA-w44r-93j7-qv28"
+      ],
+      "severity": "low",
+      "cvss": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N",
+      "description": "Unauthenticated ServerHello can downgrade later connections to classical key exchange",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Used for runtime HTTPS through reqwest/updater. No affected custom session Debug formatting found; rustls Brotli feature disabled. TLS handshake path potentially reachable; key-exchange downgrade depends on provider and server policy.",
+      "old_version": "0.23.40",
+      "new_version": [
+        "0.23.46"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.23.46"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0349.html"
+    },
+    {
+      "crate": "rustls-webpki",
+      "advisory": "RUSTSEC-2026-0382",
+      "cve": "CVE-2026-111943",
+      "aliases": [
+        "CVE-2026-111943"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Certificate verification may accept distrusted intermediates",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Runtime TLS certificate validation; exposure depends on peer chain and configured trust anchors.",
+      "old_version": "0.103.13",
+      "new_version": [
+        "0.103.16"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.103.16, <0.104.0-alpha.1",
+        ">=0.104.0-alpha.8"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0382.html"
+    },
+    {
+      "crate": "sqlx",
+      "advisory": "RUSTSEC-2024-0363",
+      "cve": null,
+      "aliases": [
+        "GHSA-xmrp-424f-vfpx"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Binary Protocol Misinterpretation caused by Truncating or Overflowing Casts",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Affected protocol encoding is Postgres-specific; app only enables SQLite. SynaptClip nevertheless upgraded to SQLx 0.8.6.",
+      "old_version": "0.7.4",
+      "new_version": [
+        "0.8.6"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.8.1"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2024-0363.html"
+    },
+    {
+      "crate": "webpki-root-certs",
+      "advisory": "RUSTSEC-2026-0383",
+      "cve": "CVE-2026-111943",
+      "aliases": [
+        "CVE-2026-111943"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Bundled root certificates allow trust in distrusted emSign intermediates",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Target-specific platform verifier bundled root path.",
+      "old_version": "1.0.7",
+      "new_version": [
+        "1.0.10"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=1.0.10"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0383.html"
+    },
+    {
+      "crate": "webpki-roots",
+      "advisory": "RUSTSEC-2026-0381",
+      "cve": "CVE-2026-111943",
+      "aliases": [
+        "CVE-2026-111943"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Bundled root certificates allow trust in distrusted emSign intermediates",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Bundled TLS roots used for runtime HTTPS.",
+      "old_version": "1.0.9",
+      "new_version": [
+        "1.0.10"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=1.0.10"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0381.html"
+    },
+    {
+      "crate": "zip",
+      "advisory": "RUSTSEC-2026-0429",
+      "cve": "CVE-2026-115909",
+      "aliases": [
+        "CVE-2026-115909",
+        "GHSA-q7v9-x93c-xqv3"
+      ],
+      "severity": "high",
+      "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+      "description": "zip: `ZipArchive::extract` aborts the process on a symlink entry with a large declared size",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Windows updater extracts ZIP archives only after Minisign verification. Symlink allocation was reachable there; dual-header cloaking exploit workflow was not found. AES support was disabled; Unix permission paths are not used by the Windows updater.",
+      "old_version": "4.6.1",
+      "new_version": [
+        "9.0.5"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=9.0.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0429.html"
+    },
+    {
+      "crate": "zip",
+      "advisory": "RUSTSEC-2026-0367",
+      "cve": null,
+      "aliases": [
+        "GHSA-vv5m-jxxh-4627"
+      ],
+      "severity": "high",
+      "cvss": "CVSS:3.1/AV:L/AC:L/PR:L/UI:R/S:U/C:H/I:H/A:H",
+      "description": " Insecure Preservation of SUID/SGID Bits during ZIP Extraction Leading to Potential Privilege Escalation",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Windows updater extracts ZIP archives only after Minisign verification. Symlink allocation was reachable there; dual-header cloaking exploit workflow was not found. AES support was disabled; Unix permission paths are not used by the Windows updater.",
+      "old_version": "4.6.1",
+      "new_version": [
+        "9.0.5"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=9.0.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0367.html"
+    },
+    {
+      "crate": "zip",
+      "advisory": "RUSTSEC-2026-0368",
+      "cve": null,
+      "aliases": [
+        "GHSA-4v9h-p7m9-rh26"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "zip: `ZipArchive::extract` creates symbolic links whose attacker-controlled targets are outside the destination directory",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Windows updater extracts ZIP archives only after Minisign verification. Symlink allocation was reachable there; dual-header cloaking exploit workflow was not found. AES support was disabled; Unix permission paths are not used by the Windows updater.",
+      "old_version": "4.6.1",
+      "new_version": [
+        "9.0.5"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=9.0.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0368.html"
+    },
+    {
+      "crate": "zip",
+      "advisory": "RUSTSEC-2026-0369",
+      "cve": null,
+      "aliases": [
+        "GHSA-4684-h2q9-2vcp"
+      ],
+      "severity": "critical",
+      "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:H",
+      "description": "ZipStreamReader::extract() and ZipArchive::extract() apply Unix permissions through symlinks without confining the target",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Windows updater extracts ZIP archives only after Minisign verification. Symlink allocation was reachable there; dual-header cloaking exploit workflow was not found. AES support was disabled; Unix permission paths are not used by the Windows updater.",
+      "old_version": "4.6.1",
+      "new_version": [
+        "9.0.5"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=9.0.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0369.html"
+    },
+    {
+      "crate": "rustls-webpki",
+      "advisory": "RUSTSEC-2026-0382",
+      "cve": "CVE-2026-111943",
+      "aliases": [
+        "CVE-2026-111943"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Certificate verification may accept distrusted intermediates",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Runtime TLS certificate validation; exposure depends on peer chain and configured trust anchors.",
+      "old_version": "0.103.15",
+      "new_version": [
+        "0.103.16"
+      ],
+      "repos_affected": [
+        "synapt-core"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=0.103.16, <0.104.0-alpha.1",
+        ">=0.104.0-alpha.8"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0382.html"
+    },
+    {
+      "crate": "webpki-roots",
+      "advisory": "RUSTSEC-2026-0381",
+      "cve": "CVE-2026-111943",
+      "aliases": [
+        "CVE-2026-111943"
+      ],
+      "severity": "unscored",
+      "cvss": null,
+      "description": "Bundled root certificates allow trust in distrusted emSign intermediates",
+      "reachable_in_binary": null,
+      "reachability": "TRANSITIVE-POTENTIALLY-REACHABLE",
+      "assessment": "Bundled TLS roots used for runtime HTTPS.",
+      "old_version": "1.0.9",
+      "new_version": [
+        "1.0.10"
+      ],
+      "repos_affected": [
+        "synapt-core"
+      ],
+      "action": "transitive-updated",
+      "patched_range": [
+        ">=1.0.10"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2026-0381.html"
+    },
+    {
+      "crate": "zip",
+      "advisory": "GHSA-m665-v7pm-7grj",
+      "cve": "CVE-2026-115905",
+      "severity": "critical",
+      "description": "Dual-header ZIP cloaking",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Updater uses ZipArchive only; no mixed-header gateway/ZipStreamReader workflow. Signature verification precedes extraction.",
+      "old_version": "4.6.1",
+      "new_version": [
+        "9.0.5"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "source": "https://github.com/zip-rs/zip2/security/advisories/GHSA-m665-v7pm-7grj"
+    },
+    {
+      "crate": "zip",
+      "advisory": "GHSA-8hxf-qr8p-62x4",
+      "cve": "CVE-2026-115906",
+      "severity": "moderate",
+      "description": "AES entry HMAC authentication bypass",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "ZIP AES feature disabled; no decryption API calls.",
+      "old_version": "4.6.1",
+      "new_version": [
+        "9.0.5"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "transitive-updated",
+      "source": "https://github.com/zip-rs/zip2/security/advisories/GHSA-8hxf-qr8p-62x4"
+    },
+    {
+      "crate": "zip",
+      "advisory": "GHSA-m665-v7pm-7grj",
+      "cve": "CVE-2026-115905",
+      "severity": "critical",
+      "description": "Dual-header ZIP cloaking",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Updater uses ZipArchive only; no mixed-header gateway/ZipStreamReader workflow. Signature verification precedes extraction.",
+      "old_version": "4.6.1",
+      "new_version": [
+        "9.0.5"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "source": "https://github.com/zip-rs/zip2/security/advisories/GHSA-m665-v7pm-7grj"
+    },
+    {
+      "crate": "zip",
+      "advisory": "GHSA-8hxf-qr8p-62x4",
+      "cve": "CVE-2026-115906",
+      "severity": "moderate",
+      "description": "AES entry HMAC authentication bypass",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "ZIP AES feature disabled; no decryption API calls.",
+      "old_version": "4.6.1",
+      "new_version": [
+        "9.0.5"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "transitive-updated",
+      "source": "https://github.com/zip-rs/zip2/security/advisories/GHSA-8hxf-qr8p-62x4"
+    }
+  ],
+  "npm_alerts": [
+    {
+      "repo": "synapt",
+      "package": "baseline-browser-mapping",
+      "severity": "moderate",
+      "direct": false,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-w5vr-8v7q-w6rv"
+      ],
+      "new_versions": [
+        "2.11.37"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt",
+      "package": "browserslist",
+      "severity": "high",
+      "direct": false,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-c83g-rgw3-j3cx",
+        "https://github.com/advisories/GHSA-73wf-gq98-2v4g"
+      ],
+      "new_versions": [
+        "4.29.5"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt",
+      "package": "esbuild",
+      "severity": "low",
+      "direct": false,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-g7r4-m6w7-qqqr"
+      ],
+      "new_versions": [
+        "0.28.2"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt",
+      "package": "nanoid",
+      "severity": "high",
+      "direct": false,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-28wg-ghj8-5hjv",
+        "https://github.com/advisories/GHSA-2v37-7h3g-55p8"
+      ],
+      "new_versions": [
+        "3.3.20"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt",
+      "package": "postcss",
+      "severity": "high",
+      "direct": true,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-fxqj-rqcc-2cmp",
+        "https://github.com/advisories/GHSA-r28c-9q8g-f849"
+      ],
+      "new_versions": [
+        "8.5.33"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt",
+      "package": "postcss-selector-parser",
+      "severity": "moderate",
+      "direct": false,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-w9m9-85wc-3x92",
+        "https://github.com/advisories/GHSA-rj75-hqrm-r3gf"
+      ],
+      "new_versions": [
+        "6.1.6"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt",
+      "package": "react-router",
+      "severity": "moderate",
+      "direct": false,
+      "scope": "runtime-frontend",
+      "affects_production_binary": true,
+      "reachability": "Runtime JavaScript is embedded; affected attacker-controlled navigation/SSR inputs were not found.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-wrjc-x8rr-h8h6",
+        "https://github.com/advisories/GHSA-337j-9hxr-rhxg"
+      ],
+      "new_versions": [
+        "7.18.5"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt",
+      "package": "react-router-dom",
+      "severity": "moderate",
+      "direct": true,
+      "scope": "runtime-frontend",
+      "affects_production_binary": true,
+      "reachability": "Runtime JavaScript is embedded; affected attacker-controlled navigation/SSR inputs were not found.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-jjmj-jmhj-qwj2"
+      ],
+      "new_versions": [
+        "7.18.5"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt",
+      "package": "source-map-js",
+      "severity": "high",
+      "direct": false,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-68fv-2mgg-jv7q"
+      ],
+      "new_versions": [
+        "1.2.2"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt",
+      "package": "vite",
+      "severity": "high",
+      "direct": true,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-698v-4r3x-3vcv",
+        "https://github.com/advisories/GHSA-r825-w8mm-5pxw",
+        "https://github.com/advisories/GHSA-587h-7wmj-h5pm",
+        "https://github.com/advisories/GHSA-9jrq-w75r-8gcw",
+        "https://github.com/advisories/GHSA-rq7h-c2jc-7f22"
+      ],
+      "new_versions": [
+        "7.3.8"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt-clip",
+      "package": "@babel/core",
+      "severity": "low",
+      "direct": false,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-4x5r-pxfx-6jf8"
+      ],
+      "new_versions": [
+        "7.29.13"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt-clip",
+      "package": "baseline-browser-mapping",
+      "severity": "moderate",
+      "direct": false,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-w5vr-8v7q-w6rv"
+      ],
+      "new_versions": [
+        "2.11.37"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt-clip",
+      "package": "browserslist",
+      "severity": "high",
+      "direct": false,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-c83g-rgw3-j3cx",
+        "https://github.com/advisories/GHSA-73wf-gq98-2v4g"
+      ],
+      "new_versions": [
+        "4.29.5"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt-clip",
+      "package": "nanoid",
+      "severity": "high",
+      "direct": false,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-28wg-ghj8-5hjv",
+        "https://github.com/advisories/GHSA-2v37-7h3g-55p8",
+        "https://github.com/advisories/GHSA-xwg4-73v4-xw9w"
+      ],
+      "new_versions": [
+        "3.3.20"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt-clip",
+      "package": "postcss",
+      "severity": "high",
+      "direct": true,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-qx2v-qp2m-jg93",
+        "https://github.com/advisories/GHSA-6g55-p6wh-862q",
+        "https://github.com/advisories/GHSA-fxqj-rqcc-2cmp",
+        "https://github.com/advisories/GHSA-r28c-9q8g-f849"
+      ],
+      "new_versions": [
+        "8.5.33"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt-clip",
+      "package": "postcss-selector-parser",
+      "severity": "moderate",
+      "direct": false,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-w9m9-85wc-3x92",
+        "https://github.com/advisories/GHSA-rj75-hqrm-r3gf"
+      ],
+      "new_versions": [
+        "6.1.6"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt-clip",
+      "package": "source-map-js",
+      "severity": "high",
+      "direct": false,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-68fv-2mgg-jv7q"
+      ],
+      "new_versions": [
+        "1.2.2"
+      ],
+      "action": "updated"
+    },
+    {
+      "repo": "synapt-clip",
+      "package": "vite",
+      "severity": "high",
+      "direct": true,
+      "scope": "development-build",
+      "affects_production_binary": false,
+      "reachability": "Toolchain only; malicious source or source maps may affect build availability or output.",
+      "advisories": [
+        "https://github.com/advisories/GHSA-4w7w-66w2-5vf9",
+        "https://github.com/advisories/GHSA-p9ff-h696-f583",
+        "https://github.com/advisories/GHSA-v6wh-96g9-6wx3",
+        "https://github.com/advisories/GHSA-698v-4r3x-3vcv",
+        "https://github.com/advisories/GHSA-r825-w8mm-5pxw",
+        "https://github.com/advisories/GHSA-587h-7wmj-h5pm",
+        "https://github.com/advisories/GHSA-9jrq-w75r-8gcw",
+        "https://github.com/advisories/GHSA-rq7h-c2jc-7f22",
+        "https://github.com/advisories/GHSA-fx2h-pf6j-xcff"
+      ],
+      "new_versions": [
+        "6.4.6"
+      ],
+      "action": "updated"
+    }
+  ],
+  "remaining_alerts": [
+    {
+      "crate": "rsa",
+      "advisory": "RUSTSEC-2023-0071",
+      "cve": "CVE-2023-49092",
+      "aliases": [
+        "CVE-2023-49092",
+        "GHSA-c38w-74pg-36hr",
+        "GHSA-4grx-2x9w-596c"
+      ],
+      "severity": "moderate",
+      "cvss": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N",
+      "description": "Marvin Attack: potential key recovery through timing sidechannels",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Only optional sqlx-mysql lockfile path. Both apps use SQLite. cargo tree --target all -i rsa has no compiled path. SQLx pins its MySQL backend to 0.8.6, whose rsa requirement is ^0.9, incompatible with patched 0.10.0.",
+      "old_version": "0.9.10",
+      "new_version": [
+        "0.9.10"
+      ],
+      "repos_affected": [
+        "synapt"
+      ],
+      "action": "deferred",
+      "patched_range": [
+        ">=0.10.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2023-0071.html"
+    },
+    {
+      "repo": "synapt",
+      "crate": "instant",
+      "version": "0.1.13",
+      "advisory": "RUSTSEC-2024-0384",
+      "description": "`instant` is unmaintained",
+      "kind": "unmaintained",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt",
+      "crate": "proc-macro-error",
+      "version": "1.0.4",
+      "advisory": "RUSTSEC-2024-0370",
+      "description": "proc-macro-error is unmaintained",
+      "kind": "unmaintained",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt",
+      "crate": "proc-macro-error2",
+      "version": "2.0.1",
+      "advisory": "RUSTSEC-2026-0173",
+      "description": "proc-macro-error2 is unmaintained",
+      "kind": "unmaintained",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt",
+      "crate": "zbus_names",
+      "version": "4.3.2",
+      "advisory": "RUSTSEC-2026-0371",
+      "description": "`zbus_names` is unmaintained",
+      "kind": "unmaintained",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt",
+      "crate": "zvariant",
+      "version": "5.12.0",
+      "advisory": "RUSTSEC-2026-0370",
+      "description": "`zvariant` is unmaintained",
+      "kind": "unmaintained",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt",
+      "crate": "zvariant_derive",
+      "version": "5.12.0",
+      "advisory": "RUSTSEC-2026-0372",
+      "description": "`zvariant_derive` is unmaintained",
+      "kind": "unmaintained",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt",
+      "crate": "glib",
+      "version": "0.18.5",
+      "advisory": "RUSTSEC-2024-0429",
+      "description": "Unsoundness in `Iterator` and `DoubleEndedIterator` impls for `glib::VariantStrIter`",
+      "kind": "unsound",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Tauri/GTK3 requires glib 0.18; fix requires >=0.20 and cannot satisfy that parent. Affected VariantStrIter caller not proven reachable. Requires upstream GTK/Tauri migration."
+    },
+    {
+      "repo": "synapt",
+      "crate": "lru",
+      "version": "0.12.5",
+      "advisory": "RUSTSEC-2026-0253",
+      "description": "Potential use-after-free due to lack of panic safety in `LruCache::pop()`",
+      "kind": "unsound",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Tantivy 0.22 requires lru 0.12.5. App direct cache is patched, but Tantivy migration would be a separate index format/API change. Affected pop/IterMut use not proven reachable."
+    },
+    {
+      "repo": "synapt",
+      "crate": "lru",
+      "version": "0.12.5",
+      "advisory": "RUSTSEC-2026-0002",
+      "description": "`IterMut` violates Stacked Borrows by invalidating internal pointer",
+      "kind": "unsound",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Tantivy 0.22 requires lru 0.12.5. App direct cache is patched, but Tantivy migration would be a separate index format/API change. Affected pop/IterMut use not proven reachable."
+    },
+    {
+      "repo": "synapt",
+      "crate": "async-executor",
+      "version": "1.14.0",
+      "advisory": null,
+      "description": "yanked version",
+      "kind": "yanked",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt",
+      "crate": "spin",
+      "version": "0.9.8",
+      "advisory": null,
+      "description": "yanked version",
+      "kind": "yanked",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "crate": "rsa",
+      "advisory": "RUSTSEC-2023-0071",
+      "cve": "CVE-2023-49092",
+      "aliases": [
+        "CVE-2023-49092",
+        "GHSA-c38w-74pg-36hr",
+        "GHSA-4grx-2x9w-596c"
+      ],
+      "severity": "moderate",
+      "cvss": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N",
+      "description": "Marvin Attack: potential key recovery through timing sidechannels",
+      "reachable_in_binary": false,
+      "reachability": "TRANSITIVE-UNREACHABLE",
+      "assessment": "Only optional sqlx-mysql lockfile path. Both apps use SQLite. cargo tree --target all -i rsa has no compiled path. SQLx pins its MySQL backend to 0.8.6, whose rsa requirement is ^0.9, incompatible with patched 0.10.0.",
+      "old_version": "0.9.10",
+      "new_version": [
+        "0.9.10"
+      ],
+      "repos_affected": [
+        "synapt-clip"
+      ],
+      "action": "deferred",
+      "patched_range": [
+        ">=0.10.0"
+      ],
+      "source": "https://rustsec.org/advisories/RUSTSEC-2023-0071.html"
+    },
+    {
+      "repo": "synapt-clip",
+      "crate": "pin-utils",
+      "version": "0.1.0",
+      "advisory": "RUSTSEC-2026-0441",
+      "description": "`pin-utils` is unmaintained",
+      "kind": "unmaintained",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt-clip",
+      "crate": "proc-macro-error",
+      "version": "1.0.4",
+      "advisory": "RUSTSEC-2024-0370",
+      "description": "proc-macro-error is unmaintained",
+      "kind": "unmaintained",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt-clip",
+      "crate": "zbus_names",
+      "version": "4.3.5",
+      "advisory": "RUSTSEC-2026-0371",
+      "description": "`zbus_names` is unmaintained",
+      "kind": "unmaintained",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt-clip",
+      "crate": "zvariant",
+      "version": "5.15.1",
+      "advisory": "RUSTSEC-2026-0370",
+      "description": "`zvariant` is unmaintained",
+      "kind": "unmaintained",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt-clip",
+      "crate": "zvariant_derive",
+      "version": "5.15.1",
+      "advisory": "RUSTSEC-2026-0372",
+      "description": "`zvariant_derive` is unmaintained",
+      "kind": "unmaintained",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt-clip",
+      "crate": "glib",
+      "version": "0.18.5",
+      "advisory": "RUSTSEC-2024-0429",
+      "description": "Unsoundness in `Iterator` and `DoubleEndedIterator` impls for `glib::VariantStrIter`",
+      "kind": "unsound",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Tauri/GTK3 requires glib 0.18; fix requires >=0.20 and cannot satisfy that parent. Affected VariantStrIter caller not proven reachable. Requires upstream GTK/Tauri migration."
+    },
+    {
+      "repo": "synapt-clip",
+      "crate": "async-executor",
+      "version": "1.14.0",
+      "advisory": null,
+      "description": "yanked version",
+      "kind": "yanked",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt-clip",
+      "crate": "clipboard-win",
+      "version": "5.4.1",
+      "advisory": null,
+      "description": "yanked version",
+      "kind": "yanked",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt-clip",
+      "crate": "spin",
+      "version": "0.9.8",
+      "advisory": null,
+      "description": "yanked version",
+      "kind": "yanked",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt-core",
+      "crate": "zbus_names",
+      "version": "4.3.5",
+      "advisory": "RUSTSEC-2026-0371",
+      "description": "`zbus_names` is unmaintained",
+      "kind": "unmaintained",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt-core",
+      "crate": "zvariant",
+      "version": "5.15.1",
+      "advisory": "RUSTSEC-2026-0370",
+      "description": "`zvariant` is unmaintained",
+      "kind": "unmaintained",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    },
+    {
+      "repo": "synapt-core",
+      "crate": "zvariant_derive",
+      "version": "5.15.1",
+      "advisory": "RUSTSEC-2026-0372",
+      "description": "`zvariant_derive` is unmaintained",
+      "kind": "unmaintained",
+      "action": "deferred",
+      "reachable_in_binary": null,
+      "reason": "Transitive crate marked unmaintained; no patched version range is available. Requires upstream parent migration."
+    }
+  ],
+  "dependency_changes": {
+    "synapt": {
+      "baseline_commit": "55eb0fe",
+      "removed": [
+        {
+          "name": "alloc-no-stdlib",
+          "version": "2.0.4"
+        },
+        {
+          "name": "alloc-stdlib",
+          "version": "0.2.2"
+        },
+        {
+          "name": "anyhow",
+          "version": "1.0.102"
+        },
+        {
+          "name": "arbitrary",
+          "version": "1.4.2"
+        },
+        {
+          "name": "brotli",
+          "version": "8.0.3"
+        },
+        {
+          "name": "brotli-decompressor",
+          "version": "5.0.1"
+        },
+        {
+          "name": "cargo_toml",
+          "version": "0.22.3"
+        },
+        {
+          "name": "cfb",
+          "version": "0.7.3"
+        },
+        {
+          "name": "crossbeam-epoch",
+          "version": "0.9.18"
+        },
+        {
+          "name": "cssparser",
+          "version": "0.36.0"
+        },
+        {
+          "name": "cssparser-macros",
+          "version": "0.6.1"
+        },
+        {
+          "name": "ctor",
+          "version": "0.8.0"
+        },
+        {
+          "name": "ctor-proc-macro",
+          "version": "0.0.7"
+        },
+        {
+          "name": "derive_arbitrary",
+          "version": "1.4.2"
+        },
+        {
+          "name": "dirs",
+          "version": "6.0.0"
+        },
+        {
+          "name": "dom_query",
+          "version": "0.27.0"
+        },
+        {
+          "name": "dtor",
+          "version": "0.3.0"
+        },
+        {
+          "name": "dtor-proc-macro",
+          "version": "0.0.6"
+        },
+        {
+          "name": "event-listener",
+          "version": "5.4.1"
+        },
+        {
+          "name": "html5ever",
+          "version": "0.38.0"
+        },
+        {
+          "name": "ico",
+          "version": "0.5.0"
+        },
+        {
+          "name": "infer",
+          "version": "0.19.0"
+        },
+        {
+          "name": "json-patch",
+          "version": "3.0.1"
+        },
+        {
+          "name": "jsonptr",
+          "version": "0.6.3"
+        },
+        {
+          "name": "libsqlite3-sys",
+          "version": "0.30.1"
+        },
+        {
+          "name": "markup5ever",
+          "version": "0.38.0"
+        },
+        {
+          "name": "memmap2",
+          "version": "0.9.10"
+        },
+        {
+          "name": "minisign-verify",
+          "version": "0.2.5"
+        },
+        {
+          "name": "muda",
+          "version": "0.19.2"
+        },
+        {
+          "name": "plist",
+          "version": "1.9.0"
+        },
+        {
+          "name": "quick-xml",
+          "version": "0.37.5"
+        },
+        {
+          "name": "quick-xml",
+          "version": "0.39.4"
+        },
+        {
+          "name": "rustix",
+          "version": "1.1.4"
+        },
+        {
+          "name": "rustls",
+          "version": "0.23.43"
+        },
+        {
+          "name": "rustls-webpki",
+          "version": "0.103.14"
+        },
+        {
+          "name": "selectors",
+          "version": "0.36.1"
+        },
+        {
+          "name": "swift-rs",
+          "version": "1.0.7"
+        },
+        {
+          "name": "synapt",
+          "version": "0.6.1"
+        },
+        {
+          "name": "synapt-core",
+          "version": "0.2.2"
+        },
+        {
+          "name": "tao",
+          "version": "0.35.3"
+        },
+        {
+          "name": "tao-macros",
+          "version": "0.1.3"
+        },
+        {
+          "name": "tauri",
+          "version": "2.11.2"
+        },
+        {
+          "name": "tauri-build",
+          "version": "2.6.2"
+        },
+        {
+          "name": "tauri-codegen",
+          "version": "2.6.2"
+        },
+        {
+          "name": "tauri-macros",
+          "version": "2.6.2"
+        },
+        {
+          "name": "tauri-plugin",
+          "version": "2.6.2"
+        },
+        {
+          "name": "tauri-plugin-updater",
+          "version": "2.10.1"
+        },
+        {
+          "name": "tauri-runtime",
+          "version": "2.11.2"
+        },
+        {
+          "name": "tauri-runtime-wry",
+          "version": "2.11.2"
+        },
+        {
+          "name": "tauri-utils",
+          "version": "2.9.2"
+        },
+        {
+          "name": "tauri-winrt-notification",
+          "version": "0.7.2"
+        },
+        {
+          "name": "tokio",
+          "version": "1.52.3"
+        },
+        {
+          "name": "tray-icon",
+          "version": "0.23.1"
+        },
+        {
+          "name": "unic-char-property",
+          "version": "0.9.0"
+        },
+        {
+          "name": "unic-char-range",
+          "version": "0.9.0"
+        },
+        {
+          "name": "unic-common",
+          "version": "0.9.0"
+        },
+        {
+          "name": "unic-ucd-ident",
+          "version": "0.9.0"
+        },
+        {
+          "name": "unic-ucd-version",
+          "version": "0.9.0"
+        },
+        {
+          "name": "urlpattern",
+          "version": "0.3.0"
+        },
+        {
+          "name": "webpki-root-certs",
+          "version": "1.0.9"
+        },
+        {
+          "name": "webpki-roots",
+          "version": "1.0.9"
+        },
+        {
+          "name": "webview2-com",
+          "version": "0.38.2"
+        },
+        {
+          "name": "webview2-com-sys",
+          "version": "0.38.2"
+        },
+        {
+          "name": "window-vibrancy",
+          "version": "0.6.0"
+        },
+        {
+          "name": "wry",
+          "version": "0.55.1"
+        },
+        {
+          "name": "zip",
+          "version": "4.6.1"
+        },
+        {
+          "name": "zstd",
+          "version": "0.13.3"
+        },
+        {
+          "name": "zstd-safe",
+          "version": "7.2.4"
+        },
+        {
+          "name": "zstd-sys",
+          "version": "2.0.16+zstd.1.5.7"
+        }
+      ],
+      "added": [
+        {
+          "name": "alloc-no-stdlib",
+          "version": "3.0.0"
+        },
+        {
+          "name": "alloc-stdlib",
+          "version": "0.3.0"
+        },
+        {
+          "name": "anyhow",
+          "version": "1.0.103"
+        },
+        {
+          "name": "base64",
+          "version": "0.23.1"
+        },
+        {
+          "name": "bit-set",
+          "version": "0.11.1"
+        },
+        {
+          "name": "bit-vec",
+          "version": "0.10.2"
+        },
+        {
+          "name": "block-buffer",
+          "version": "0.12.1"
+        },
+        {
+          "name": "brotli",
+          "version": "9.1.3"
+        },
+        {
+          "name": "brotli-decompressor",
+          "version": "6.3.2"
+        },
+        {
+          "name": "cargo_toml",
+          "version": "1.0.1"
+        },
+        {
+          "name": "cfb",
+          "version": "0.14.0"
+        },
+        {
+          "name": "const-oid",
+          "version": "0.10.3"
+        },
+        {
+          "name": "core-foundation",
+          "version": "0.9.4"
+        },
+        {
+          "name": "crossbeam-epoch",
+          "version": "0.9.20"
+        },
+        {
+          "name": "crypto-common",
+          "version": "0.2.2"
+        },
+        {
+          "name": "cssparser",
+          "version": "0.37.0"
+        },
+        {
+          "name": "cssparser",
+          "version": "0.38.0"
+        },
+        {
+          "name": "cssparser-macros",
+          "version": "0.7.1"
+        },
+        {
+          "name": "ctor",
+          "version": "1.0.14"
+        },
+        {
+          "name": "digest",
+          "version": "0.11.3"
+        },
+        {
+          "name": "dirs",
+          "version": "7.0.0"
+        },
+        {
+          "name": "dom_query",
+          "version": "0.28.0"
+        },
+        {
+          "name": "dom_query",
+          "version": "0.29.0"
+        },
+        {
+          "name": "event-listener",
+          "version": "5.4.2"
+        },
+        {
+          "name": "html5ever",
+          "version": "0.39.0"
+        },
+        {
+          "name": "html5ever",
+          "version": "0.40.1"
+        },
+        {
+          "name": "hybrid-array",
+          "version": "0.4.15"
+        },
+        {
+          "name": "ico",
+          "version": "0.6.0"
+        },
+        {
+          "name": "infer",
+          "version": "0.22.0"
+        },
+        {
+          "name": "json-patch",
+          "version": "4.2.0"
+        },
+        {
+          "name": "jsonptr",
+          "version": "0.7.1"
+        },
+        {
+          "name": "keyboard-types",
+          "version": "0.8.3"
+        },
+        {
+          "name": "libsqlite3-sys",
+          "version": "0.39.1"
+        },
+        {
+          "name": "link-section",
+          "version": "0.19.4"
+        },
+        {
+          "name": "lru",
+          "version": "0.18.5"
+        },
+        {
+          "name": "markup5ever",
+          "version": "0.39.0"
+        },
+        {
+          "name": "markup5ever",
+          "version": "0.40.0"
+        },
+        {
+          "name": "memmap2",
+          "version": "0.9.11"
+        },
+        {
+          "name": "minisign-verify",
+          "version": "0.3.0"
+        },
+        {
+          "name": "muda",
+          "version": "0.20.0"
+        },
+        {
+          "name": "ndk-context",
+          "version": "0.1.1"
+        },
+        {
+          "name": "nix",
+          "version": "0.31.3"
+        },
+        {
+          "name": "phf",
+          "version": "0.14.0"
+        },
+        {
+          "name": "phf_codegen",
+          "version": "0.14.0"
+        },
+        {
+          "name": "phf_generator",
+          "version": "0.14.0"
+        },
+        {
+          "name": "phf_macros",
+          "version": "0.14.0"
+        },
+        {
+          "name": "phf_shared",
+          "version": "0.14.0"
+        },
+        {
+          "name": "plist",
+          "version": "1.10.0"
+        },
+        {
+          "name": "quick-xml",
+          "version": "0.41.0"
+        },
+        {
+          "name": "rustix",
+          "version": "1.1.6"
+        },
+        {
+          "name": "rustls",
+          "version": "0.23.46"
+        },
+        {
+          "name": "rustls-webpki",
+          "version": "0.103.16"
+        },
+        {
+          "name": "selectors",
+          "version": "0.38.0"
+        },
+        {
+          "name": "selectors",
+          "version": "0.41.0"
+        },
+        {
+          "name": "servo_arc",
+          "version": "0.5.0"
+        },
+        {
+          "name": "sha2",
+          "version": "0.11.1"
+        },
+        {
+          "name": "static_vcruntime",
+          "version": "3.0.0"
+        },
+        {
+          "name": "string_cache",
+          "version": "0.11.0"
+        },
+        {
+          "name": "string_cache_codegen",
+          "version": "0.11.2"
+        },
+        {
+          "name": "swift-rs",
+          "version": "1.0.9"
+        },
+        {
+          "name": "synapt",
+          "version": "0.6.2"
+        },
+        {
+          "name": "synapt-core",
+          "version": "0.2.3"
+        },
+        {
+          "name": "system-configuration",
+          "version": "0.7.0"
+        },
+        {
+          "name": "system-configuration-sys",
+          "version": "0.6.0"
+        },
+        {
+          "name": "tao",
+          "version": "0.37.2"
+        },
+        {
+          "name": "tao-macros",
+          "version": "0.1.4"
+        },
+        {
+          "name": "tauri",
+          "version": "2.12.6"
+        },
+        {
+          "name": "tauri-build",
+          "version": "2.7.5"
+        },
+        {
+          "name": "tauri-codegen",
+          "version": "2.7.5"
+        },
+        {
+          "name": "tauri-macros",
+          "version": "2.7.5"
+        },
+        {
+          "name": "tauri-plugin",
+          "version": "2.7.3"
+        },
+        {
+          "name": "tauri-plugin-updater",
+          "version": "2.14.1"
+        },
+        {
+          "name": "tauri-runtime",
+          "version": "2.12.3"
+        },
+        {
+          "name": "tauri-runtime-wry",
+          "version": "2.12.4"
+        },
+        {
+          "name": "tauri-utils",
+          "version": "2.10.3"
+        },
+        {
+          "name": "tauri-winrt-notification",
+          "version": "0.7.3"
+        },
+        {
+          "name": "tokio",
+          "version": "1.53.3"
+        },
+        {
+          "name": "tray-icon",
+          "version": "0.25.1"
+        },
+        {
+          "name": "typed-path",
+          "version": "0.12.4"
+        },
+        {
+          "name": "urlpattern",
+          "version": "0.6.0"
+        },
+        {
+          "name": "web_atoms",
+          "version": "0.3.0"
+        },
+        {
+          "name": "webpki-root-certs",
+          "version": "1.0.10"
+        },
+        {
+          "name": "webpki-roots",
+          "version": "1.0.10"
+        },
+        {
+          "name": "webview2-com",
+          "version": "0.39.1"
+        },
+        {
+          "name": "webview2-com-sys",
+          "version": "0.39.1"
+        },
+        {
+          "name": "window-vibrancy",
+          "version": "0.8.1"
+        },
+        {
+          "name": "windows",
+          "version": "0.62.2"
+        },
+        {
+          "name": "windows-collections",
+          "version": "0.3.2"
+        },
+        {
+          "name": "windows-future",
+          "version": "0.3.2"
+        },
+        {
+          "name": "windows-numerics",
+          "version": "0.3.1"
+        },
+        {
+          "name": "windows-registry",
+          "version": "0.6.1"
+        },
+        {
+          "name": "windows-threading",
+          "version": "0.2.1"
+        },
+        {
+          "name": "wry",
+          "version": "0.57.2"
+        },
+        {
+          "name": "zip",
+          "version": "9.0.5"
+        },
+        {
+          "name": "zstd",
+          "version": "0.13.4"
+        },
+        {
+          "name": "zstd-safe",
+          "version": "7.4.0"
+        },
+        {
+          "name": "zstd-sys",
+          "version": "2.1.2+zstd.1.5.7"
+        }
+      ]
+    },
+    "synapt-clip": {
+      "baseline_commit": "7eb9887",
+      "removed": [
+        {
+          "name": "ahash",
+          "version": "0.8.12"
+        },
+        {
+          "name": "alloc-no-stdlib",
+          "version": "2.0.4"
+        },
+        {
+          "name": "alloc-stdlib",
+          "version": "0.2.2"
+        },
+        {
+          "name": "anyhow",
+          "version": "1.0.102"
+        },
+        {
+          "name": "arbitrary",
+          "version": "1.4.2"
+        },
+        {
+          "name": "aws-lc-rs",
+          "version": "1.17.0"
+        },
+        {
+          "name": "aws-lc-sys",
+          "version": "0.41.0"
+        },
+        {
+          "name": "brotli",
+          "version": "8.0.2"
+        },
+        {
+          "name": "brotli-decompressor",
+          "version": "5.0.0"
+        },
+        {
+          "name": "cargo_toml",
+          "version": "0.22.3"
+        },
+        {
+          "name": "cfb",
+          "version": "0.7.3"
+        },
+        {
+          "name": "convert_case",
+          "version": "0.4.0"
+        },
+        {
+          "name": "cssparser",
+          "version": "0.29.6"
+        },
+        {
+          "name": "cssparser",
+          "version": "0.36.0"
+        },
+        {
+          "name": "cssparser-macros",
+          "version": "0.6.1"
+        },
+        {
+          "name": "ctor",
+          "version": "0.2.9"
+        },
+        {
+          "name": "derive_arbitrary",
+          "version": "1.4.2"
+        },
+        {
+          "name": "derive_more",
+          "version": "0.99.20"
+        },
+        {
+          "name": "dom_query",
+          "version": "0.27.0"
+        },
+        {
+          "name": "event-listener",
+          "version": "2.5.3"
+        },
+        {
+          "name": "futf",
+          "version": "0.1.5"
+        },
+        {
+          "name": "fxhash",
+          "version": "0.2.1"
+        },
+        {
+          "name": "getrandom",
+          "version": "0.1.16"
+        },
+        {
+          "name": "h2",
+          "version": "0.4.14"
+        },
+        {
+          "name": "hashbrown",
+          "version": "0.14.5"
+        },
+        {
+          "name": "hashlink",
+          "version": "0.8.4"
+        },
+        {
+          "name": "html5ever",
+          "version": "0.29.1"
+        },
+        {
+          "name": "html5ever",
+          "version": "0.38.0"
+        },
+        {
+          "name": "ico",
+          "version": "0.5.0"
+        },
+        {
+          "name": "infer",
+          "version": "0.19.0"
+        },
+        {
+          "name": "json-patch",
+          "version": "3.0.1"
+        },
+        {
+          "name": "jsonptr",
+          "version": "0.6.3"
+        },
+        {
+          "name": "kuchikiki",
+          "version": "0.8.8-speedreader"
+        },
+        {
+          "name": "libc",
+          "version": "0.2.183"
+        },
+        {
+          "name": "libsqlite3-sys",
+          "version": "0.27.0"
+        },
+        {
+          "name": "mac",
+          "version": "0.1.1"
+        },
+        {
+          "name": "markup5ever",
+          "version": "0.14.1"
+        },
+        {
+          "name": "markup5ever",
+          "version": "0.38.0"
+        },
+        {
+          "name": "match_token",
+          "version": "0.1.0"
+        },
+        {
+          "name": "matches",
+          "version": "0.1.10"
+        },
+        {
+          "name": "minimal-lexical",
+          "version": "0.2.1"
+        },
+        {
+          "name": "minisign-verify",
+          "version": "0.2.5"
+        },
+        {
+          "name": "mio",
+          "version": "1.1.1"
+        },
+        {
+          "name": "muda",
+          "version": "0.17.1"
+        },
+        {
+          "name": "nodrop",
+          "version": "0.1.14"
+        },
+        {
+          "name": "nom",
+          "version": "7.1.3"
+        },
+        {
+          "name": "paste",
+          "version": "1.0.15"
+        },
+        {
+          "name": "phf",
+          "version": "0.10.1"
+        },
+        {
+          "name": "phf",
+          "version": "0.11.3"
+        },
+        {
+          "name": "phf",
+          "version": "0.8.0"
+        },
+        {
+          "name": "phf_codegen",
+          "version": "0.11.3"
+        },
+        {
+          "name": "phf_codegen",
+          "version": "0.8.0"
+        },
+        {
+          "name": "phf_generator",
+          "version": "0.10.0"
+        },
+        {
+          "name": "phf_generator",
+          "version": "0.11.3"
+        },
+        {
+          "name": "phf_generator",
+          "version": "0.8.0"
+        },
+        {
+          "name": "phf_macros",
+          "version": "0.10.0"
+        },
+        {
+          "name": "phf_macros",
+          "version": "0.11.3"
+        },
+        {
+          "name": "phf_shared",
+          "version": "0.10.0"
+        },
+        {
+          "name": "phf_shared",
+          "version": "0.11.3"
+        },
+        {
+          "name": "phf_shared",
+          "version": "0.8.0"
+        },
+        {
+          "name": "plist",
+          "version": "1.8.0"
+        },
+        {
+          "name": "png",
+          "version": "0.17.16"
+        },
+        {
+          "name": "proc-macro-hack",
+          "version": "0.5.20+deprecated"
+        },
+        {
+          "name": "quick-xml",
+          "version": "0.38.4"
+        },
+        {
+          "name": "quinn-proto",
+          "version": "0.11.14"
+        },
+        {
+          "name": "quinn-udp",
+          "version": "0.5.14"
+        },
+        {
+          "name": "rand",
+          "version": "0.7.3"
+        },
+        {
+          "name": "rand",
+          "version": "0.8.5"
+        },
+        {
+          "name": "rand",
+          "version": "0.9.4"
+        },
+        {
+          "name": "rand_chacha",
+          "version": "0.2.2"
+        },
+        {
+          "name": "rand_chacha",
+          "version": "0.9.0"
+        },
+        {
+          "name": "rand_core",
+          "version": "0.5.1"
+        },
+        {
+          "name": "rand_core",
+          "version": "0.9.5"
+        },
+        {
+          "name": "rand_hc",
+          "version": "0.2.0"
+        },
+        {
+          "name": "rand_pcg",
+          "version": "0.2.1"
+        },
+        {
+          "name": "rustix",
+          "version": "1.1.4"
+        },
+        {
+          "name": "rustls",
+          "version": "0.23.40"
+        },
+        {
+          "name": "rustls-webpki",
+          "version": "0.103.13"
+        },
+        {
+          "name": "selectors",
+          "version": "0.24.0"
+        },
+        {
+          "name": "selectors",
+          "version": "0.36.1"
+        },
+        {
+          "name": "semver",
+          "version": "1.0.27"
+        },
+        {
+          "name": "serde_spanned",
+          "version": "1.1.0"
+        },
+        {
+          "name": "servo_arc",
+          "version": "0.2.0"
+        },
+        {
+          "name": "siphasher",
+          "version": "0.3.11"
+        },
+        {
+          "name": "sqlformat",
+          "version": "0.2.6"
+        },
+        {
+          "name": "sqlx",
+          "version": "0.7.4"
+        },
+        {
+          "name": "sqlx-core",
+          "version": "0.7.4"
+        },
+        {
+          "name": "sqlx-macros",
+          "version": "0.7.4"
+        },
+        {
+          "name": "sqlx-macros-core",
+          "version": "0.7.4"
+        },
+        {
+          "name": "sqlx-mysql",
+          "version": "0.7.4"
+        },
+        {
+          "name": "sqlx-postgres",
+          "version": "0.7.4"
+        },
+        {
+          "name": "sqlx-sqlite",
+          "version": "0.7.4"
+        },
+        {
+          "name": "string_cache",
+          "version": "0.8.9"
+        },
+        {
+          "name": "string_cache_codegen",
+          "version": "0.5.4"
+        },
+        {
+          "name": "swift-rs",
+          "version": "1.0.7"
+        },
+        {
+          "name": "synapt-clip",
+          "version": "0.6.0"
+        },
+        {
+          "name": "synapt-core",
+          "version": "0.2.2"
+        },
+        {
+          "name": "tao",
+          "version": "0.34.8"
+        },
+        {
+          "name": "tao-macros",
+          "version": "0.1.3"
+        },
+        {
+          "name": "tauri",
+          "version": "2.10.3"
+        },
+        {
+          "name": "tauri-build",
+          "version": "2.5.6"
+        },
+        {
+          "name": "tauri-codegen",
+          "version": "2.5.5"
+        },
+        {
+          "name": "tauri-macros",
+          "version": "2.5.5"
+        },
+        {
+          "name": "tauri-plugin",
+          "version": "2.5.4"
+        },
+        {
+          "name": "tauri-plugin-updater",
+          "version": "2.10.1"
+        },
+        {
+          "name": "tauri-runtime",
+          "version": "2.10.1"
+        },
+        {
+          "name": "tauri-runtime-wry",
+          "version": "2.10.1"
+        },
+        {
+          "name": "tauri-utils",
+          "version": "2.8.3"
+        },
+        {
+          "name": "tendril",
+          "version": "0.4.3"
+        },
+        {
+          "name": "tokio",
+          "version": "1.50.0"
+        },
+        {
+          "name": "tokio-macros",
+          "version": "2.6.1"
+        },
+        {
+          "name": "toml_datetime",
+          "version": "1.1.0+spec-1.1.0"
+        },
+        {
+          "name": "toml_parser",
+          "version": "1.1.0+spec-1.1.0"
+        },
+        {
+          "name": "toml_writer",
+          "version": "1.1.0+spec-1.1.0"
+        },
+        {
+          "name": "tray-icon",
+          "version": "0.21.3"
+        },
+        {
+          "name": "unic-char-property",
+          "version": "0.9.0"
+        },
+        {
+          "name": "unic-char-range",
+          "version": "0.9.0"
+        },
+        {
+          "name": "unic-common",
+          "version": "0.9.0"
+        },
+        {
+          "name": "unic-ucd-ident",
+          "version": "0.9.0"
+        },
+        {
+          "name": "unic-ucd-version",
+          "version": "0.9.0"
+        },
+        {
+          "name": "unicode_categories",
+          "version": "0.1.1"
+        },
+        {
+          "name": "urlpattern",
+          "version": "0.3.0"
+        },
+        {
+          "name": "wasi",
+          "version": "0.9.0+wasi-snapshot-preview1"
+        },
+        {
+          "name": "webpki-root-certs",
+          "version": "1.0.7"
+        },
+        {
+          "name": "webpki-roots",
+          "version": "1.0.9"
+        },
+        {
+          "name": "webview2-com",
+          "version": "0.38.2"
+        },
+        {
+          "name": "webview2-com-sys",
+          "version": "0.38.2"
+        },
+        {
+          "name": "window-vibrancy",
+          "version": "0.6.0"
+        },
+        {
+          "name": "wry",
+          "version": "0.54.4"
+        },
+        {
+          "name": "zip",
+          "version": "4.6.1"
+        }
+      ],
+      "added": [
+        {
+          "name": "alloc-no-stdlib",
+          "version": "3.0.0"
+        },
+        {
+          "name": "alloc-stdlib",
+          "version": "0.3.0"
+        },
+        {
+          "name": "anyhow",
+          "version": "1.0.103"
+        },
+        {
+          "name": "aws-lc-rs",
+          "version": "1.19.0"
+        },
+        {
+          "name": "aws-lc-sys",
+          "version": "0.47.0"
+        },
+        {
+          "name": "base64",
+          "version": "0.23.1"
+        },
+        {
+          "name": "bit-set",
+          "version": "0.11.1"
+        },
+        {
+          "name": "bit-vec",
+          "version": "0.10.2"
+        },
+        {
+          "name": "block-buffer",
+          "version": "0.12.1"
+        },
+        {
+          "name": "brotli",
+          "version": "9.1.3"
+        },
+        {
+          "name": "brotli-decompressor",
+          "version": "6.3.2"
+        },
+        {
+          "name": "cargo_toml",
+          "version": "1.0.1"
+        },
+        {
+          "name": "cfb",
+          "version": "0.14.0"
+        },
+        {
+          "name": "chacha20",
+          "version": "0.10.2"
+        },
+        {
+          "name": "const-oid",
+          "version": "0.10.3"
+        },
+        {
+          "name": "cpufeatures",
+          "version": "0.3.1"
+        },
+        {
+          "name": "crypto-common",
+          "version": "0.2.2"
+        },
+        {
+          "name": "cssparser",
+          "version": "0.37.0"
+        },
+        {
+          "name": "cssparser",
+          "version": "0.38.0"
+        },
+        {
+          "name": "cssparser-macros",
+          "version": "0.7.1"
+        },
+        {
+          "name": "ctor",
+          "version": "1.0.14"
+        },
+        {
+          "name": "dbus",
+          "version": "0.9.12"
+        },
+        {
+          "name": "digest",
+          "version": "0.11.3"
+        },
+        {
+          "name": "dirs",
+          "version": "7.0.0"
+        },
+        {
+          "name": "dom_query",
+          "version": "0.28.0"
+        },
+        {
+          "name": "dom_query",
+          "version": "0.29.0"
+        },
+        {
+          "name": "h2",
+          "version": "0.4.16"
+        },
+        {
+          "name": "hashlink",
+          "version": "0.10.0"
+        },
+        {
+          "name": "html5ever",
+          "version": "0.39.0"
+        },
+        {
+          "name": "html5ever",
+          "version": "0.40.1"
+        },
+        {
+          "name": "hybrid-array",
+          "version": "0.4.10"
+        },
+        {
+          "name": "ico",
+          "version": "0.6.0"
+        },
+        {
+          "name": "infer",
+          "version": "0.22.0"
+        },
+        {
+          "name": "json-patch",
+          "version": "4.2.0"
+        },
+        {
+          "name": "jsonptr",
+          "version": "0.7.1"
+        },
+        {
+          "name": "keyboard-types",
+          "version": "0.8.3"
+        },
+        {
+          "name": "libc",
+          "version": "0.2.191"
+        },
+        {
+          "name": "libdbus-sys",
+          "version": "0.2.7"
+        },
+        {
+          "name": "libsqlite3-sys",
+          "version": "0.39.1"
+        },
+        {
+          "name": "link-section",
+          "version": "0.19.4"
+        },
+        {
+          "name": "markup5ever",
+          "version": "0.39.0"
+        },
+        {
+          "name": "markup5ever",
+          "version": "0.40.0"
+        },
+        {
+          "name": "minisign-verify",
+          "version": "0.3.0"
+        },
+        {
+          "name": "mio",
+          "version": "1.2.5"
+        },
+        {
+          "name": "muda",
+          "version": "0.20.0"
+        },
+        {
+          "name": "nix",
+          "version": "0.31.3"
+        },
+        {
+          "name": "objc2-cloud-kit",
+          "version": "0.3.2"
+        },
+        {
+          "name": "objc2-core-data",
+          "version": "0.3.2"
+        },
+        {
+          "name": "objc2-core-image",
+          "version": "0.3.2"
+        },
+        {
+          "name": "objc2-core-location",
+          "version": "0.3.2"
+        },
+        {
+          "name": "objc2-core-text",
+          "version": "0.3.2"
+        },
+        {
+          "name": "objc2-user-notifications",
+          "version": "0.3.2"
+        },
+        {
+          "name": "phf",
+          "version": "0.14.0"
+        },
+        {
+          "name": "phf_codegen",
+          "version": "0.14.0"
+        },
+        {
+          "name": "phf_generator",
+          "version": "0.14.0"
+        },
+        {
+          "name": "phf_macros",
+          "version": "0.14.0"
+        },
+        {
+          "name": "phf_shared",
+          "version": "0.14.0"
+        },
+        {
+          "name": "plist",
+          "version": "1.10.0"
+        },
+        {
+          "name": "quick-xml",
+          "version": "0.41.0"
+        },
+        {
+          "name": "quinn-proto",
+          "version": "0.11.19"
+        },
+        {
+          "name": "quinn-udp",
+          "version": "0.5.16"
+        },
+        {
+          "name": "rand",
+          "version": "0.10.4"
+        },
+        {
+          "name": "rand",
+          "version": "0.8.6"
+        },
+        {
+          "name": "rand_core",
+          "version": "0.10.1"
+        },
+        {
+          "name": "rand_pcg",
+          "version": "0.10.2"
+        },
+        {
+          "name": "rustix",
+          "version": "1.1.6"
+        },
+        {
+          "name": "rustls",
+          "version": "0.23.46"
+        },
+        {
+          "name": "rustls-webpki",
+          "version": "0.103.16"
+        },
+        {
+          "name": "selectors",
+          "version": "0.38.0"
+        },
+        {
+          "name": "selectors",
+          "version": "0.41.0"
+        },
+        {
+          "name": "semver",
+          "version": "1.0.28"
+        },
+        {
+          "name": "serde_spanned",
+          "version": "1.1.3"
+        },
+        {
+          "name": "servo_arc",
+          "version": "0.5.0"
+        },
+        {
+          "name": "sha2",
+          "version": "0.11.1"
+        },
+        {
+          "name": "sqlx",
+          "version": "0.8.6"
+        },
+        {
+          "name": "sqlx-core",
+          "version": "0.8.6"
+        },
+        {
+          "name": "sqlx-macros",
+          "version": "0.8.6"
+        },
+        {
+          "name": "sqlx-macros-core",
+          "version": "0.8.6"
+        },
+        {
+          "name": "sqlx-mysql",
+          "version": "0.8.6"
+        },
+        {
+          "name": "sqlx-postgres",
+          "version": "0.8.6"
+        },
+        {
+          "name": "sqlx-sqlite",
+          "version": "0.8.6"
+        },
+        {
+          "name": "static_vcruntime",
+          "version": "3.0.0"
+        },
+        {
+          "name": "string_cache",
+          "version": "0.11.0"
+        },
+        {
+          "name": "string_cache_codegen",
+          "version": "0.11.2"
+        },
+        {
+          "name": "swift-rs",
+          "version": "1.0.9"
+        },
+        {
+          "name": "synapt-clip",
+          "version": "0.6.1"
+        },
+        {
+          "name": "synapt-core",
+          "version": "0.2.3"
+        },
+        {
+          "name": "tao",
+          "version": "0.37.2"
+        },
+        {
+          "name": "tao-macros",
+          "version": "0.1.4"
+        },
+        {
+          "name": "tauri",
+          "version": "2.12.6"
+        },
+        {
+          "name": "tauri-build",
+          "version": "2.7.5"
+        },
+        {
+          "name": "tauri-codegen",
+          "version": "2.7.5"
+        },
+        {
+          "name": "tauri-macros",
+          "version": "2.7.5"
+        },
+        {
+          "name": "tauri-plugin",
+          "version": "2.7.3"
+        },
+        {
+          "name": "tauri-plugin-updater",
+          "version": "2.14.1"
+        },
+        {
+          "name": "tauri-runtime",
+          "version": "2.12.3"
+        },
+        {
+          "name": "tauri-runtime-wry",
+          "version": "2.12.4"
+        },
+        {
+          "name": "tauri-utils",
+          "version": "2.10.3"
+        },
+        {
+          "name": "tokio",
+          "version": "1.53.3"
+        },
+        {
+          "name": "tokio-macros",
+          "version": "2.7.2"
+        },
+        {
+          "name": "toml",
+          "version": "1.2.1+spec-1.1.0"
+        },
+        {
+          "name": "toml_datetime",
+          "version": "1.1.3+spec-1.1.0"
+        },
+        {
+          "name": "toml_parser",
+          "version": "1.1.5+spec-1.1.0"
+        },
+        {
+          "name": "toml_writer",
+          "version": "1.2.0+spec-1.1.0"
+        },
+        {
+          "name": "tray-icon",
+          "version": "0.25.1"
+        },
+        {
+          "name": "typed-path",
+          "version": "0.12.4"
+        },
+        {
+          "name": "urlpattern",
+          "version": "0.6.0"
+        },
+        {
+          "name": "web_atoms",
+          "version": "0.3.0"
+        },
+        {
+          "name": "webpki-root-certs",
+          "version": "1.0.10"
+        },
+        {
+          "name": "webpki-roots",
+          "version": "1.0.10"
+        },
+        {
+          "name": "webview2-com",
+          "version": "0.39.1"
+        },
+        {
+          "name": "webview2-com-sys",
+          "version": "0.39.1"
+        },
+        {
+          "name": "window-vibrancy",
+          "version": "0.8.1"
+        },
+        {
+          "name": "windows",
+          "version": "0.62.2"
+        },
+        {
+          "name": "windows-collections",
+          "version": "0.3.2"
+        },
+        {
+          "name": "windows-future",
+          "version": "0.3.2"
+        },
+        {
+          "name": "windows-numerics",
+          "version": "0.3.1"
+        },
+        {
+          "name": "windows-threading",
+          "version": "0.2.1"
+        },
+        {
+          "name": "wry",
+          "version": "0.57.2"
+        },
+        {
+          "name": "zip",
+          "version": "9.0.5"
+        }
+      ]
+    },
+    "synapt-core": {
+      "baseline_commit": "877eb82",
+      "removed": [
+        {
+          "name": "anyhow",
+          "version": "1.0.102"
+        },
+        {
+          "name": "rustix",
+          "version": "1.1.5"
+        },
+        {
+          "name": "rustls-webpki",
+          "version": "0.103.15"
+        },
+        {
+          "name": "synapt-core",
+          "version": "0.2.2"
+        },
+        {
+          "name": "webpki-roots",
+          "version": "1.0.9"
+        }
+      ],
+      "added": [
+        {
+          "name": "anyhow",
+          "version": "1.0.103"
+        },
+        {
+          "name": "rustix",
+          "version": "1.1.6"
+        },
+        {
+          "name": "rustls-webpki",
+          "version": "0.103.16"
+        },
+        {
+          "name": "synapt-core",
+          "version": "0.2.3"
+        },
+        {
+          "name": "webpki-roots",
+          "version": "1.0.10"
+        }
+      ]
+    }
+  },
+  "validation": {
+    "local": "cargo build, cargo test, cargo clippy -- -D warnings and npm run build passed for both apps; 146 Synapt tests, 136 SynaptClip tests, and 15 release-coordination tests per app passed. Core all-feature tests and clippy passed.",
+    "sqlite": "Runtime version regression tests require SQLite >=3.54.0 and passed.",
+    "source_maps": "No .map files in either production dist tree. Input maps can still be processed by build tools.",
+    "platforms": "Local Rust checks ran on macOS. Linux CI and a new Windows updater compilation check run on the PRs; the local tests do not assert those results."
+  },
+  "compatibility_notes": [
+    "Updater 2.14.1 requires Tauri >=2.12 and uses ZIP 9. Windows Extract error variant wraps ZIP 9 errors; app does not match that variant. Signed update verification is retained.",
+    "SQLx 0.7 to 0.8 SQLite decode/macro changes reviewed; migrations and app database tests pass. Unused Any/JSON defaults disabled; SQLite, runtime, migrations and macros retained.",
+    "SQLx-sqlite 0.8.6 is vendored unchanged except the libsqlite3-sys requirement moves from 0.30.1 to 0.39.1. Even upstream SQLx 0.9.0 caps this below 0.38. Licenses and provenance are included.",
+    "Direct LRU cache migrated to the patched 0.18 series; used constructor/get/put/clear APIs remain compatible. Tantivy still requires a separate old LRU, documented below.",
+    "React Router 7.18.5 retains the HashRouter, Routes, Route and useNavigate APIs used here. App has fixed routes, no splats/loaders/actions/SSR hydration; Node 20 and React 19 satisfy its requirements. Frontend build passes."
+  ],
+  "release_order": [
+    "Core PR #6 merged after green checks; stable v0.2.3 published with core.json.",
+    "Review and merge app PRs only after checks and user approval. Either app may release first.",
+    "App release jobs read exact core 0.2.3 from Cargo.lock, wait for the stable tag/asset, then check out that tag. Runtime core checks remain informational and cannot block signed app updates."
+  ],
+  "notes": "Dependabot disabled for synapt-core; local Cargo audit used. Reachability assessments are source/feature based; no exploit demonstration is claimed. No critical/high Cargo vulnerabilities remain. Optional MySQL RSA advisory and inherited unsoundness/maintenance warnings remain explicitly deferred."
+}

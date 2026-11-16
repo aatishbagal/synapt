@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "version": "0.6.2",
+      "date": "2026-11-16",
+      "headline": "Security update: dependency vulnerability patches",
+      "highlights": [
+        "Patched ZIP handling used by the Windows updater",
+        "Updated TLS certificate verification and bundled trust roots",
+        "Updated the bundled database and development tools",
+        "Includes SynaptCore 0.2.3"
+      ]
+    },
+    {
       "version": "0.6.1",
       "date": "2026-10-22",
       "headline": "Hotfix: fixed excessive disk usage on macOS.",
