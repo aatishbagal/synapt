@@ -1,6 +1,6 @@
 [package]
 name = "synapt"
-version = "0.6.1"
+version = "0.6.2"
 description = "Spotlight-style launcher and encrypted LAN file utility"
 authors = ["Aatish Bagal <dev@aatish.io>"]
 license = "Apache-2.0"
@@ -20,7 +20,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
 synapt-core = { path = "../../synapt-core", version = "^0.2.3", features = ["updates"] }
 tokio = { version = "1", features = ["full"] }
-sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "migrate"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["sqlite", "runtime-tokio", "migrate", "macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
@@ -38,13 +38,13 @@ chrono = { version = "0.4", features = ["serde"] }
 hostname = "0.3"
 local-ip-address = "0.6"
 tantivy = "0.22"
-lru = "0.12"
+lru = "0.18.2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 axum = "0.7"
 reqwest = { version = "0.12", default-features = false }
-tauri-plugin-updater = "2"
+tauri-plugin-updater = "2.14.1"
 urlencoding = "2"
 tauri-plugin-opener = "2"
 
@@ -71,3 +71,7 @@ windows = { version = "0.58", features = [
 [build-dependencies]
 toml = "0.9"
 tauri-build = { version = "2", features = [] }
+
+# Released SQLx drivers do not yet accept the SQLite security fix.
+[patch.crates-io]
+sqlx-sqlite = { path = "vendor/sqlx-sqlite" }

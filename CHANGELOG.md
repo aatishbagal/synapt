@@ -2,6 +2,16 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.2] - 2026-11-16
+### Security
+- Updated the Windows updater ZIP dependency to 9.0.5 for CVE-2026-115905, CVE-2026-115906, and CVE-2026-115909
+- Updated rustls to address TLS session disclosure, handshake validation, certificate decompression, and key-exchange advisories
+- Updated certificate verification and trust roots for CVE-2026-111943
+- Bundled patched SQLite for CVE-2026-119375 using a documented SQLx driver compatibility patch
+- Updated XML parsing and other affected Rust dependencies
+- Updated frontend and development dependencies to resolve npm security advisories
+- Bundled SynaptCore 0.2.3 and required it for default and Linux builds
+
 ## [0.6.1] - 2026-10-22 (hotfix)
 ### Changed
 - Indexed folders are no longer rescanned automatically once a day; use Rescan in Settings to pick up changes made outside Synapt

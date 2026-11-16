@@ -108,3 +108,37 @@ jobs:
       - name: Debug build
         working-directory: synapt/src-tauri
         run: cargo build --locked
+
+  windows-check:
+    name: Windows updater build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: synapt
+      - name: Checkout synapt-core
+        uses: actions/checkout@v4
+        with:
+          repository: aatishbagal/synapt-core
+          ref: dev
+          path: synapt-core
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: synapt/package-lock.json
+      - uses: dtolnay/rust-toolchain@1.96.0
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: synapt/src-tauri
+      - name: Build frontend
+        working-directory: synapt
+        run: |
+          npm ci
+          npm run build
+      - name: Refresh the synapt-core lock entry
+        working-directory: synapt/src-tauri
+        run: cargo metadata --format-version 1 > $null
+      - name: Check Windows updater and app targets
+        working-directory: synapt/src-tauri
+        run: cargo check --locked --all-targets

@@ -1,0 +1,7 @@
+Upstream: sqlx-sqlite 0.8.6, https://github.com/launchbadge/sqlx
+Source: verified crates.io package sqlx-sqlite-0.8.6
+Reason: CVE-2026-119375 / RUSTSEC-2026-0459 requires libsqlite3-sys >=0.39.0.
+Released SQLx 0.8.6 requires 0.30.1; even SQLx 0.9.0 caps it below 0.38.
+Local change: update the libsqlite3-sys constraint to 0.39.1 in both manifests.
+Driver source and upstream MIT/Apache licenses are preserved.
+Remove this patch when a compatible upstream SQLx release supports patched SQLite.
